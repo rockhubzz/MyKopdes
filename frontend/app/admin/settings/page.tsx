@@ -1,0 +1,123 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { apiFetch, ApiError } from '@/lib/api';
+
+interface SettingsResponse {
+  infrastructure: Record<string, string>;
+  business_rules: Record<string, string>;
+  backup: Record<string, string>;
+}
+
+export default function SettingsPage() {
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [infra, setInfra] = useState({ store_name: '', store_address: '', api_base_url: '', db_host: '', db_port: '' });
+  const [rules, setRules] = useState({ tax_rate: '0', shu_rate: '0.02', low_stock_default_threshold: '10' });
+  const [backup, setBackup] = useState({ backup_schedule_cron: '0 2 * * *' });
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<SettingsResponse>('/admin/settings').then((res) => {
+      setSettings(res);
+      setInfra((prev) => ({ ...prev, ...res.infrastructure }));
+      setRules((prev) => ({ ...prev, ...res.business_rules }));
+      setBackup((prev) => ({ ...prev, ...res.backup }));
+    });
+  }, []);
+
+  async function save(group: 'infrastructure' | 'business_rules' | 'backup', values: Record<string, string>) {
+    setStatus(null);
+    setError(null);
+    try {
+      await apiFetch('/admin/settings', { method: 'PUT', body: { group, values } });
+      setStatus('Saved.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <h1 className="text-2xl font-bold text-koperasi-800">Settings</h1>
+      <p className="text-sm text-koperasi-500 -mt-4">
+        These are stored in the database and take effect immediately — no container redeploy needed. (Changing the DB
+        host/port here updates the record for reference/ops purposes; the running containers still read their
+        bootstrap connection from <code>backend/.env</code> and need a restart to point at a genuinely different
+        database server.)
+      </p>
+
+      {status && <p className="text-sm text-green-600">{status}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <section className="card space-y-3">
+        <h2 className="font-semibold text-koperasi-800">Infrastructure</h2>
+        <div>
+          <label className="label">Store Name</label>
+          <input className="input" value={infra.store_name} onChange={(e) => setInfra({ ...infra, store_name: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">Store Address</label>
+          <input className="input" value={infra.store_address} onChange={(e) => setInfra({ ...infra, store_address: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">API Base URL</label>
+          <input className="input" value={infra.api_base_url} onChange={(e) => setInfra({ ...infra, api_base_url: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">DB Host</label>
+            <input className="input" value={infra.db_host} onChange={(e) => setInfra({ ...infra, db_host: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">DB Port</label>
+            <input className="input" value={infra.db_port} onChange={(e) => setInfra({ ...infra, db_port: e.target.value })} />
+          </div>
+        </div>
+        <button className="btn-primary" onClick={() => save('infrastructure', infra)}>
+          Save Infrastructure Settings
+        </button>
+      </section>
+
+      <section className="card space-y-3">
+        <h2 className="font-semibold text-koperasi-800">Business Rules</h2>
+        <div>
+          <label className="label">Tax Rate (%)</label>
+          <input className="input" type="number" step="0.01" value={rules.tax_rate} onChange={(e) => setRules({ ...rules, tax_rate: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">SHU Rate (fraction of each sale, e.g. 0.02 = 2%)</label>
+          <input className="input" type="number" step="0.001" value={rules.shu_rate} onChange={(e) => setRules({ ...rules, shu_rate: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">Default Low-Stock Threshold</label>
+          <input
+            className="input"
+            type="number"
+            value={rules.low_stock_default_threshold}
+            onChange={(e) => setRules({ ...rules, low_stock_default_threshold: e.target.value })}
+          />
+        </div>
+        <button className="btn-primary" onClick={() => save('business_rules', rules)}>
+          Save Business Rules
+        </button>
+      </section>
+
+      <section className="card space-y-3">
+        <h2 className="font-semibold text-koperasi-800">Backup Schedule</h2>
+        <div>
+          <label className="label">Cron Expression</label>
+          <input
+            className="input"
+            value={backup.backup_schedule_cron}
+            onChange={(e) => setBackup({ ...backup, backup_schedule_cron: e.target.value })}
+          />
+          <p className="text-xs text-koperasi-400 mt-1">Default: 0 2 * * * (every day at 02:00)</p>
+        </div>
+        <button className="btn-primary" onClick={() => save('backup', backup)}>
+          Save Backup Schedule
+        </button>
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-koperasi-50 text-koperasi-900 antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- Design system ---------- */
+
+.card {
+  @apply bg-white rounded-2xl shadow-[0_1px_2px_rgba(27,52,40,0.06),0_4px_16px_-4px_rgba(27,52,40,0.08)] border border-koperasi-100 p-5;
+}
+
+.btn-primary {
+  @apply bg-koperasi-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm
+    hover:bg-koperasi-700 hover:shadow
+    active:bg-koperasi-700 active:scale-[0.99]
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-koperasi-400 focus-visible:ring-offset-1
+    transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100;
+}
+
+.btn-secondary {
+  @apply bg-white text-koperasi-700 border border-koperasi-300 px-4 py-2 rounded-lg font-medium shadow-sm
+    hover:bg-koperasi-50 hover:border-koperasi-400
+    active:bg-koperasi-100 active:scale-[0.99]
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-koperasi-400 focus-visible:ring-offset-1
+    transition-all disabled:opacity-50 disabled:active:scale-100;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm
+    hover:bg-red-700 hover:shadow
+    active:bg-red-700 active:scale-[0.99]
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1
+    transition-all disabled:opacity-50 disabled:active:scale-100;
+}
+
+.input {
+  @apply w-full border border-koperasi-200 rounded-lg px-3 py-2 text-sm bg-white
+    placeholder:text-koperasi-300
+    focus:outline-none focus:ring-2 focus:ring-koperasi-400 focus:border-transparent
+    transition-shadow disabled:bg-koperasi-50 disabled:text-koperasi-400;
+}
+
+.label {
+  @apply block text-sm font-medium text-koperasi-800 mb-1;
+}
+
+table.data-table {
+  @apply w-full text-sm border-collapse;
+}
+table.data-table thead th {
+  @apply text-left text-xs uppercase tracking-wide text-koperasi-500 border-b border-koperasi-100 py-2 px-3 bg-white;
+}
+table.data-table tbody td {
+  @apply border-b border-koperasi-50 py-2 px-3;
+}
+table.data-table tbody tr {
+  @apply transition-colors;
+}
+table.data-table tbody tr:hover {
+  @apply bg-koperasi-50/70;
+}
+table.data-table tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+.badge {
+  @apply inline-block px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+/* Numeric columns and money: stable-width figures, no layout jitter. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shimmer placeholder for table refetches. */
+.skeleton {
+  @apply bg-koperasi-100;
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* ---------- Thermal receipt printing ---------- */
+/*
+ * The receipt is printed from the live page (window.print()). Without
+ * isolation, the sidebar, header, and screen decorations would print too.
+ * These rules hide the entire app except #receipt-print-area and reformat
+ * the ticket for a 72–80mm thermal roll: black on white, no shadows.
+ */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 3mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #receipt-print-area,
+  #receipt-print-area * {
+    visibility: visible;
+  }
+
+  #receipt-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 74mm;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  #receipt-print-area *,
+  #receipt-print-area *::before,
+  #receipt-print-area *::after {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}

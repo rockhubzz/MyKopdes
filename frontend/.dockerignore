@@ -1,0 +1,8 @@
+# Keep images reproducible: local installs, stale builds, and env files come
+# from package-lock.json / build args / compose env at build & run time.
+.git
+node_modules
+.next
+.env
+.env*.local
+*.log

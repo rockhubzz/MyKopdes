@@ -1,0 +1,114 @@
+# Local development stack.
+# First run:  cp .env.example .env   (then edit values)
+#             docker compose up -d --build
+#             docker compose exec backend bash scripts/first-run.sh
+#
+# Services talk to each other over the internal "koperasi_net" network using
+# their service names (mysql, backend, frontend) as hostnames. Nginx is the
+# only container that publishes a port to the host.
+
+networks:
+  koperasi_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  backend_storage:
+  backend_vendor:
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: koperasi_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-koperasi}
+      MYSQL_USER: ${DB_USERNAME:-koperasi}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-koperasi_secret}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret}
+    ports:
+      - "${DB_FORWARD_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - koperasi_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_secret}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: koperasi_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+      - backend_storage:/var/www/html/storage
+    networks:
+      - koperasi_net
+    expose:
+      - "9000"
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/www/html/vendor/autoload.php && php-fpm -t || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+    container_name: koperasi_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - koperasi_net
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: koperasi_nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend:/var/www/html:ro
+    networks:
+      - koperasi_net

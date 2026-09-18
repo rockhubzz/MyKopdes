@@ -1,0 +1,202 @@
+# ============================================================================
+# koperasi-app — root .gitignore
+# Covers: backend (Laravel/PHP) / frontend (Next.js) / nginx / db (MySQL)
+# Rule: never commit secrets, dependencies, build output, or local data.
+# Commit the *.example templates instead.
+# ============================================================================
+
+# --------------------------------------------------------------------------
+# 0. Env / secrets — ALL scopes (never commit real credentials)
+# --------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env*.local
+!frontend/.env.example
+*.pem
+*.key
+!**/*.key.example
+.auth.json
+backend/auth.json
+
+# --------------------------------------------------------------------------
+# 1. Backend — Laravel / PHP / Composer
+# --------------------------------------------------------------------------
+# Dependencies (rebuilt from backend/composer.lock during docker build)
+backend/vendor/
+vendor/
+
+# JS tooling if ever used inside backend/
+backend/node_modules/
+backend/npm-debug.log
+backend/yarn-error.log
+
+# Laravel generated / runtime artifacts (recreated by composer install / storage:link)
+backend/bootstrap/cache/*.php
+!backend/bootstrap/cache/.gitignore
+backend/public/hot
+backend/public/storage
+backend/storage/*.key
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/framework/testing/*
+backend/storage/app/backups/*
+backend/storage/app/public/*
+# Keep placeholder files so empty dirs survive a fresh clone
+!backend/storage/**/logs/.gitkeep
+!backend/storage/**/framework/**/data/.gitkeep
+!backend/storage/**/framework/**/sessions/.gitkeep
+!backend/storage/**/framework/**/views/.gitkeep
+!backend/storage/**/app/**/backups/.gitkeep
+!backend/storage/**/app/**/public/.gitkeep
+
+# Laravel / PHP test & dev artifacts
+backend/.phpunit.cache/
+backend/.phpunit.result.cache
+.phpunit.cache/
+.phpunit.result.cache
+backend/Homestead.json
+backend/Homestead.yaml
+Homestead.json
+Homestead.yaml
+
+# --------------------------------------------------------------------------
+# 2. Frontend — Next.js / Node
+# --------------------------------------------------------------------------
+# Dependencies (rebuilt from frontend/package-lock.json)
+frontend/node_modules/
+node_modules/
+frontend/.pnp/
+frontend/.pnp.js
+
+# Build output
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+.next/
+out/
+build/
+dist/
+
+# Next.js / Vercel / Turbo caches
+frontend/.vercel/
+frontend/.turbo/
+frontend/*.tsbuildinfo
+frontend/.eslintcache
+.tsbuildinfo
+.eslintcache
+
+# Debug / package-manager logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.bak
+
+# Misc frontend runtime
+frontend/public/uploads/*
+!frontend/public/uploads/.gitkeep
+
+# --------------------------------------------------------------------------
+# 3. Nginx — TLS certs / keys (see nginx/certs/README.md)
+# --------------------------------------------------------------------------
+nginx/certs/*.pem
+nginx/certs/*.key
+nginx/certs/*.crt
+nginx/certs/*.csr
+nginx/certs/*.p12
+nginx/certs/*.pfx
+nginx/certs/dhparam*.pem
+nginx/*.htpasswd
+nginx/.htpasswd
+# Keep docs/placeholders so the folder structure survives clone
+!nginx/certs/README.md
+!nginx/certs/.gitkeep
+
+# --------------------------------------------------------------------------
+# 4. Database — MySQL data dirs, dumps & local volumes
+# --------------------------------------------------------------------------
+# Named docker volumes live outside the repo, but ignore any bind-mounted data
+mysql_data/
+mysql-data/
+db_data/
+db-data/
+data/db/
+data/mysql/
+db/mysql-data/
+database/data/
+*.sql
+*.sql.gz
+*.dump
+*.bak.sql
+dump.rdb
+*.sqlite
+*.sqlite3
+*.db
+
+# --------------------------------------------------------------------------
+# 5. Docker / Compose local overrides
+# --------------------------------------------------------------------------
+docker-compose.override.yml
+docker-compose.local.yml
+.compose/
+.docker/
+
+# --------------------------------------------------------------------------
+# 6. Logs, coverage, temp & backups (all scopes)
+# --------------------------------------------------------------------------
+*.log
+logs/
+log/
+coverage/
+.nyc_output/
+.coverage/
+htmlcov/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+*.bak
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --------------------------------------------------------------------------
+# 7. OS / editor / IDE noise
+# --------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+*.iml
+nbproject/
+netbeans/
