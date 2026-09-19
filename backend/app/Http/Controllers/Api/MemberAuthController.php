@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class MemberAuthController extends Controller
 {
-    /** Members log in with either their email or their membership ID. */
+    /** Members log in with their email, membership ID, or phone number. */
     public function login(Request $request)
     {
         $data = $request->validate([
@@ -18,8 +18,11 @@ class MemberAuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $member = Member::where('email', $data['identifier'])
-            ->orWhere('membership_id', $data['identifier'])
+        $identifier = trim($data['identifier']);
+
+        $member = Member::where('email', $identifier)
+            ->orWhere('membership_id', $identifier)
+            ->orWhere('phone', $identifier)
             ->first();
 
         if (! $member || ! Hash::check($data['password'], $member->password)) {
