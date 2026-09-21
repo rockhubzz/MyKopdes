@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useLanguage, type TKey, type Params } from '@/lib/i18n/LanguageContext';
 import ReceiptView from '@/components/ReceiptView';
 import type { CheckoutPreview, Discount, Item, Member, PaymentMethod, Transaction } from '@/lib/types';
 
@@ -16,14 +18,14 @@ function formatRp(n: number) {
 }
 
 /** One-line explanation of what the previewed discount does. */
-function describePreviewDiscount(d: Discount): string {
+function describePreviewDiscount(d: Discount, t: (key: TKey, params?: Params) => string): string {
   switch (d.type) {
     case 'percentage':
-      return `${Number(d.value)}% off the subtotal`;
+      return t('cashier.pctOff', { value: Number(d.value) });
     case 'flat':
-      return `${formatRp(Number(d.value))} off the subtotal`;
+      return t('cashier.flatOff', { value: formatRp(Number(d.value)) });
     case 'buy_x_get_y':
-      return `Buy ${d.buy_qty}, get ${d.get_qty} free${d.category ? ` (${d.category.name})` : ''}`;
+      return t('cashier.bxgy', { x: d.buy_qty ?? 0, y: d.get_qty ?? 0, cat: d.category ? ` (${d.category.name})` : '' });
   }
 }
 
@@ -34,6 +36,7 @@ export default function CashierPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [memberQuery, setMemberQuery] = useState('');
   const [member, setMember] = useState<Member | null>(null);
+  const [memberResults, setMemberResults] = useState<Member[]>([]);
   const [memberError, setMemberError] = useState<string | null>(null);
   const [activeDiscounts, setActiveDiscounts] = useState<Discount[]>([]);
   const [explicitDiscountId, setExplicitDiscountId] = useState<string>('');
@@ -44,6 +47,7 @@ export default function CashierPage() {
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   const scanInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,13 +99,13 @@ export default function CashierPage() {
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
-        setPreviewError(err instanceof ApiError ? err.message : 'Could not preview totals.');
+        setPreviewError(err instanceof ApiError ? err.message : t('cashier.previewFailed'));
       })
       .finally(() => {
         if (!controller.signal.aborted) setPreviewLoading(false);
       });
     return () => controller.abort();
-  }, [debouncedPreviewRequest]);
+  }, [debouncedPreviewRequest, t]);
 
   // Item search fires once per pause in typing (not per keystroke), and a
   // superseded request is aborted so a slow earlier response can never
@@ -145,7 +149,7 @@ export default function CashierPage() {
       addItemToCart(item);
       setScanValue('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Item not found.');
+      setError(err instanceof ApiError ? err.message : t('cashier.scanFailed'));
     }
   }
 
@@ -160,16 +164,31 @@ export default function CashierPage() {
   async function handleMemberLookup(e: React.FormEvent) {
     e.preventDefault();
     setMemberError(null);
-    if (!memberQuery.trim()) {
+    const q = memberQuery.trim();
+    if (!q) {
       setMember(null);
+      setMemberResults([]);
       return;
     }
     try {
-      const m = await apiFetch<Member>(`/members/lookup?query=${encodeURIComponent(memberQuery.trim())}`);
-      setMember(m);
+      const list = await apiFetch<Member[]>(`/members/lookup?query=${encodeURIComponent(q)}`);
+      if (list.length === 1) {
+        // Exact phone/ID/QR hit (or an unambiguous name) — attach directly.
+        setMember(list[0]);
+        setMemberResults([]);
+      } else if (list.length > 1) {
+        // Several members share the name — let the cashier pick.
+        setMember(null);
+        setMemberResults(list);
+      } else {
+        setMemberError(t('cashier.memberNotFound'));
+        setMember(null);
+        setMemberResults([]);
+      }
     } catch {
-      setMemberError('No active member found for that phone/ID.');
+      setMemberError(t('cashier.memberNotFound'));
       setMember(null);
+      setMemberResults([]);
     }
   }
 
@@ -190,10 +209,11 @@ export default function CashierPage() {
       setReceipt(transaction);
       setCart([]);
       setMember(null);
+      setMemberResults([]);
       setMemberQuery('');
       setExplicitDiscountId('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Checkout failed.');
+      setError(err instanceof ApiError ? err.message : t('cashier.checkoutFailed'));
     } finally {
       setBusy(false);
     }
@@ -206,29 +226,29 @@ export default function CashierPage() {
   return (
     <div className="grid lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-4">
-        <h1 className="text-2xl font-bold text-koperasi-800">Cashier Mode</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('cashier.title')}</h1>
 
         <div className="card space-y-3">
           <form onSubmit={handleScan} className="flex gap-2">
             <input
               ref={scanInputRef}
               className="input"
-              aria-label="Scan barcode or SKU"
-              placeholder="Scan barcode or type SKU, then press Enter..."
+              aria-label={t('cashier.scanAria')}
+              placeholder={t('cashier.scanPlaceholder')}
               value={scanValue}
               onChange={(e) => setScanValue(e.target.value)}
               autoFocus
             />
             <button type="submit" className="btn-primary shrink-0">
-              Add
+              {t('cashier.add')}
             </button>
           </form>
 
           <div className="relative">
             <input
               className="input"
-              aria-label="Search items by name"
-              placeholder="Or search by item name..."
+              aria-label={t('cashier.searchAria')}
+              placeholder={t('cashier.searchPlaceholder')}
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
             />
@@ -242,7 +262,7 @@ export default function CashierPage() {
                   >
                     <span>{item.name}</span>
                     <span className="text-koperasi-400">
-                      {formatRp(Number(item.unit_price))} · stock {item.current_stock}
+                      {formatRp(Number(item.unit_price))} · {t('cashier.stockOf', { count: item.current_stock })}
                     </span>
                   </button>
                 ))}
@@ -255,10 +275,10 @@ export default function CashierPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Item</th>
-                <th>Price</th>
-                <th>Qty</th>
-                <th>Subtotal</th>
+                <th>{t('cashier.colItem')}</th>
+                <th>{t('cashier.colPrice')}</th>
+                <th>{t('cashier.colQty')}</th>
+                <th>{t('cashier.colSubtotal')}</th>
                 <th></th>
               </tr>
             </thead>
@@ -266,7 +286,7 @@ export default function CashierPage() {
               {cart.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center py-8 text-koperasi-400">
-                    Cart is empty. Scan or search for an item to begin.
+                    {t('cashier.cartEmpty')}
                   </td>
                 </tr>
               )}
@@ -278,7 +298,7 @@ export default function CashierPage() {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        aria-label={`Decrease quantity of ${l.item.name}`}
+                        aria-label={t('cashier.decreaseQty', { name: l.item.name })}
                         className="btn-secondary px-2 py-0.5"
                         onClick={() => updateQty(l.item.id, l.quantity - 1)}
                       >
@@ -287,7 +307,7 @@ export default function CashierPage() {
                       <span className="w-8 text-center tabular-nums">{l.quantity}</span>
                       <button
                         type="button"
-                        aria-label={`Increase quantity of ${l.item.name}`}
+                        aria-label={t('cashier.increaseQty', { name: l.item.name })}
                         className="btn-secondary px-2 py-0.5"
                         onClick={() => updateQty(l.item.id, l.quantity + 1)}
                       >
@@ -302,7 +322,7 @@ export default function CashierPage() {
                       className="text-red-500 text-xs hover:underline"
                       onClick={() => updateQty(l.item.id, 0)}
                     >
-                      Remove
+                      {t('cashier.remove')}
                     </button>
                   </td>
                 </tr>
@@ -314,23 +334,44 @@ export default function CashierPage() {
 
       <div className="space-y-4">
         <div className="card space-y-3">
-          <h2 className="font-semibold text-koperasi-800">Member</h2>
+          <h2 className="font-semibold text-koperasi-800">{t('cashier.member')}</h2>
           <form onSubmit={handleMemberLookup} className="flex gap-2">
             <input
               className="input"
-              aria-label="Member phone, ID, or QR"
-              placeholder="Phone / Membership ID / QR"
+              aria-label={t('cashier.memberAria')}
+              placeholder={t('cashier.memberPlaceholder')}
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
             />
             <button type="submit" className="btn-secondary shrink-0">
-              Find
+              {t('cashier.find')}
             </button>
           </form>
           {memberError && (
             <p className="text-xs text-red-600" role="alert">
               {memberError}
             </p>
+          )}
+          {!member && memberResults.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-koperasi-500">{t('cashier.selectMember')}</p>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-koperasi-200 divide-y divide-koperasi-50">
+                {memberResults.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-koperasi-50 flex justify-between gap-2"
+                    onClick={() => {
+                      setMember(m);
+                      setMemberResults([]);
+                    }}
+                  >
+                    <span className="font-medium min-w-0 truncate">{m.name}</span>
+                    <span className="text-xs text-koperasi-500 shrink-0">{m.membership_id}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {member && (
             <div className="bg-koperasi-50 rounded-lg p-3 text-sm flex justify-between items-center">
@@ -343,30 +384,31 @@ export default function CashierPage() {
                 className="text-xs text-red-500 hover:underline"
                 onClick={() => {
                   setMember(null);
+                  setMemberResults([]);
                   setMemberQuery('');
                 }}
               >
-                Clear
+                {t('cashier.clear')}
               </button>
             </div>
           )}
         </div>
 
         <div className="card space-y-2">
-          <h2 className="font-semibold text-koperasi-800">Active Discounts</h2>
+          <h2 className="font-semibold text-koperasi-800">{t('cashier.activeDiscounts')}</h2>
           <select className="input" value={explicitDiscountId} onChange={(e) => setExplicitDiscountId(e.target.value)}>
-            <option value="">Auto-apply best discount</option>
+            <option value="">{t('cashier.autoBest')}</option>
             {activeDiscounts.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name} {d.scope === 'member' ? '(member-only)' : ''}
+                {d.name} {d.scope === 'member' ? t('cashier.memberOnlySuffix') : ''}
               </option>
             ))}
           </select>
-          {activeDiscounts.length === 0 && <p className="text-xs text-koperasi-400">No active promotions right now.</p>}
+          {activeDiscounts.length === 0 && <p className="text-xs text-koperasi-400">{t('cashier.noPromos')}</p>}
         </div>
 
         <div className="card space-y-3">
-          <h2 className="font-semibold text-koperasi-800">Payment</h2>
+          <h2 className="font-semibold text-koperasi-800">{t('cashier.payment')}</h2>
           <div className="grid grid-cols-3 gap-2">
             {(['cash', 'qris', 'bank_transfer'] as const).map((m) => (
               <button
@@ -378,17 +420,17 @@ export default function CashierPage() {
                 }`}
                 onClick={() => setPaymentMethod(m)}
               >
-                {m.replace('_', ' ')}
+                {t(`pay.${m === 'bank_transfer' ? 'bankTransfer' : m}` as TKey)}
               </button>
             ))}
           </div>
 
           <div className="flex justify-between text-lg font-bold pt-2 border-t border-koperasi-100 tabular-nums">
-            <span>Subtotal</span>
+            <span>{t('cashier.subtotal')}</span>
             <span>{formatRp(subtotal)}</span>
           </div>
 
-          {previewLoading && !preview && cart.length > 0 && <div className="skeleton h-24 rounded-lg" aria-label="Loading price preview" />}
+          {previewLoading && !preview && cart.length > 0 && <div className="skeleton h-24 rounded-lg" aria-label={t('cashier.loadingPreview')} />}
 
           {previewError && (
             <p className="text-xs text-red-600" role="alert">
@@ -397,38 +439,38 @@ export default function CashierPage() {
           )}
 
           {preview && cart.length > 0 && (
-            <div className="rounded-lg bg-koperasi-50 p-3 text-sm space-y-1 tabular-nums" aria-live="polite" aria-label="Price preview">
+            <div className="rounded-lg bg-koperasi-50 p-3 text-sm space-y-1 tabular-nums" aria-live="polite" aria-label={t('cashier.previewLabel')}>
               <div className="flex justify-between">
-                <span>Subtotal</span>
+                <span>{t('cashier.subtotal')}</span>
                 <span>{formatRp(preview.subtotal)}</span>
               </div>
               {preview.discount ? (
                 <>
                   <div className="flex justify-between text-koperasi-700 font-medium">
-                    <span>Discount · {preview.discount.name}</span>
+                    <span>{t('cashier.discountWith', { name: preview.discount.name })}</span>
                     <span>− {formatRp(preview.discount_amount)}</span>
                   </div>
-                  <p className="text-xs text-koperasi-500">{describePreviewDiscount(preview.discount)}</p>
+                  <p className="text-xs text-koperasi-500">{describePreviewDiscount(preview.discount, t)}</p>
                 </>
               ) : (
-                <div className="text-xs text-koperasi-400">No discount applies to this sale.</div>
+                <div className="text-xs text-koperasi-400">{t('cashier.noDiscount')}</div>
               )}
               <div className="flex justify-between">
-                <span>Tax{preview.tax_rate ? ` (${preview.tax_rate}%)` : ''}</span>
+                <span>{preview.tax_rate ? t('cashier.taxWith', { rate: preview.tax_rate }) : t('cashier.taxPlain')}</span>
                 <span>+ {formatRp(preview.tax_amount)}</span>
               </div>
               <div className="flex justify-between font-bold text-base border-t border-koperasi-200 pt-1">
-                <span>Total</span>
+                <span>{t('cashier.total')}</span>
                 <span>{formatRp(preview.total)}</span>
               </div>
               {preview.warnings.map((w) => (
-                <p key={w} className="text-xs text-amber-700" role="alert">
-                  ⚠ {w}
+                <p key={w} className="text-xs text-amber-700 flex items-center gap-1" role="alert">
+                  <TriangleAlert size={12} aria-hidden="true" className="shrink-0" /> {w}
                 </p>
               ))}
             </div>
           )}
-          <p className="text-xs text-koperasi-400">Live server estimate — the printed receipt shows this same breakdown.</p>
+          <p className="text-xs text-koperasi-400">{t('cashier.liveNote')}</p>
 
           {error && (
             <p className="text-sm text-red-600" role="alert">
@@ -437,7 +479,7 @@ export default function CashierPage() {
           )}
 
           <button type="button" className="btn-primary w-full tabular-nums" onClick={handleCheckout} disabled={busy || cart.length === 0}>
-            {busy ? 'Processing...' : `Charge ${formatRp(subtotal)}`}
+            {busy ? t('cashier.processing') : t('cashier.charge', { amount: formatRp(subtotal) })}
           </button>
         </div>
       </div>

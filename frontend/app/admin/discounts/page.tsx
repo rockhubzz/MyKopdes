@@ -4,6 +4,7 @@ import { useState } from 'react';
 import DataTable, { Column } from '@/components/DataTable';
 import DetailModal, { DetailTarget } from '@/components/details/DetailModal';
 import { apiFetch, ApiError } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Discount, DiscountScope, DiscountType } from '@/lib/types';
 
 const emptyForm = {
@@ -19,6 +20,7 @@ export default function DiscountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
+  const { t, tx } = useLanguage();
 
   function openCreate() {
     setEditing(null);
@@ -59,30 +61,34 @@ export default function DiscountsPage() {
       setShowForm(false);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+      setError(err instanceof ApiError ? err.message : t('discounts.saveFailed'));
     }
   }
 
   async function handleDeactivate(d: Discount) {
-    if (!confirm(`Deactivate "${d.name}"?`)) return;
+    if (!confirm(t('discounts.deactivateConfirm', { name: d.name }))) return;
     await apiFetch(`/discounts/${d.id}`, { method: 'DELETE' });
     setReloadKey((k) => k + 1);
   }
 
   const columns: Column<Discount>[] = [
-    { header: 'Name', render: (d) => d.name },
-    { header: 'Type', render: (d) => <span className="capitalize">{d.type.replace(/_/g, ' ')}</span> },
+    { header: t('discounts.colName'), render: (d) => d.name },
+    { header: t('discounts.colType'), render: (d) => <span className="capitalize">{tx(`dtype.${d.type}`, d.type.replace(/_/g, ' '))}</span> },
     {
-      header: 'Value',
+      header: t('discounts.colValue'),
       render: (d) =>
-        d.type === 'percentage' ? `${d.value}%` : d.type === 'flat' ? `Rp ${Number(d.value).toLocaleString('id-ID')}` : `Buy ${d.buy_qty} Get ${d.get_qty}`,
+        d.type === 'percentage'
+          ? t('discounts.valuePct', { value: d.value })
+          : d.type === 'flat'
+            ? t('discounts.valueFlat', { value: Number(d.value).toLocaleString('id-ID') })
+            : t('discounts.valueBxgy', { x: d.buy_qty ?? 0, y: d.get_qty ?? 0 }),
     },
-    { header: 'Scope', render: (d) => <span className="badge bg-koperasi-100 text-koperasi-700 capitalize">{d.scope}</span> },
+    { header: t('discounts.colScope'), render: (d) => <span className="badge bg-koperasi-100 text-koperasi-700 capitalize">{tx(`scope.${d.scope}`, d.scope)}</span> },
     {
-      header: 'Status',
+      header: t('discounts.colStatus'),
       render: (d) => (
         <span className={`badge ${d.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {d.is_active ? 'Active' : 'Inactive'}
+          {d.is_active ? t('common.active') : t('common.inactive')}
         </span>
       ),
     },
@@ -91,9 +97,9 @@ export default function DiscountsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-koperasi-800">Discounts & Promotions</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('discounts.title')}</h1>
         <button className="btn-primary" onClick={openCreate}>
-          + New Discount
+          {t('discounts.newDiscount')}
         </button>
       </div>
 
@@ -104,12 +110,12 @@ export default function DiscountsPage() {
         onRowClick={(d) => setDetail({ entity: 'discount', id: d.id })}
         reloadKey={reloadKey}
         actions={(d) => (
-          <div className="space-x-2">
-            <button className="text-koperasi-600 hover:underline text-sm" onClick={() => openEdit(d)}>
-              Edit
+          <div className="flex justify-end gap-1.5">
+            <button className="btn-action-edit" onClick={() => openEdit(d)}>
+              {t('discounts.edit')}
             </button>
-            <button className="text-red-600 hover:underline text-sm" onClick={() => handleDeactivate(d)}>
-              Deactivate
+            <button className="btn-action-danger" onClick={() => handleDeactivate(d)}>
+              {t('discounts.deactivate')}
             </button>
           </div>
         )}
@@ -118,63 +124,63 @@ export default function DiscountsPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card w-full max-w-md my-8">
-            <h2 className="font-semibold text-lg mb-4">{editing ? 'Edit Discount' : 'New Discount'}</h2>
+            <h2 className="font-semibold text-lg mb-4">{editing ? t('discounts.editTitle') : t('discounts.newTitle')}</h2>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="label">Name</label>
+                <label className="label">{t('discounts.name')}</label>
                 <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div>
-                <label className="label">Description</label>
+                <label className="label">{t('discounts.description')}</label>
                 <input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Type</label>
+                  <label className="label">{t('discounts.type')}</label>
                   <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as DiscountType })}>
-                    <option value="percentage">Percentage</option>
-                    <option value="flat">Flat Amount</option>
-                    <option value="buy_x_get_y">Buy X Get Y</option>
+                    <option value="percentage">{t('discounts.percentage')}</option>
+                    <option value="flat">{t('discounts.flatAmount')}</option>
+                    <option value="buy_x_get_y">{t('discounts.buyXGetY')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="label">Scope</label>
+                  <label className="label">{t('discounts.scope')}</label>
                   <select className="input" value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value as DiscountScope })}>
-                    <option value="general">General</option>
-                    <option value="member">Member-only</option>
+                    <option value="general">{t('discounts.general')}</option>
+                    <option value="member">{t('discounts.memberOnlyOpt')}</option>
                   </select>
                 </div>
               </div>
 
               {form.type !== 'buy_x_get_y' ? (
                 <div>
-                  <label className="label">{form.type === 'percentage' ? 'Percentage (%)' : 'Flat Amount (Rp)'}</label>
+                  <label className="label">{form.type === 'percentage' ? t('discounts.pctLabel') : t('discounts.flatLabel')}</label>
                   <input className="input" type="number" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label">Buy Qty</label>
+                    <label className="label">{t('discounts.buyQty')}</label>
                     <input className="input" type="number" value={form.buy_qty} onChange={(e) => setForm({ ...form, buy_qty: e.target.value })} />
                   </div>
                   <div>
-                    <label className="label">Get Qty (free)</label>
+                    <label className="label">{t('discounts.getQtyFree')}</label>
                     <input className="input" type="number" value={form.get_qty} onChange={(e) => setForm({ ...form, get_qty: e.target.value })} />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="label">Minimum Purchase (Rp, optional)</label>
+                <label className="label">{t('discounts.minPurchaseOpt')}</label>
                 <input className="input" type="number" value={form.min_purchase} onChange={(e) => setForm({ ...form, min_purchase: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Starts At (optional)</label>
+                  <label className="label">{t('discounts.startsAtOpt')}</label>
                   <input className="input" type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Ends At (optional)</label>
+                  <label className="label">{t('discounts.endsAtOpt')}</label>
                   <input className="input" type="datetime-local" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} />
                 </div>
               </div>
@@ -183,10 +189,10 @@ export default function DiscountsPage() {
 
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary">
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </form>

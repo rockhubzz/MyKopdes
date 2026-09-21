@@ -3,6 +3,7 @@
 import { memo, useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Paginated } from '@/lib/types';
 
 export interface Column<T> {
@@ -50,6 +51,7 @@ function DataTableInner<T extends { id: number }>({
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   // Fetch once per pause in typing, not once per keystroke.
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -67,7 +69,7 @@ function DataTableInner<T extends { id: number }>({
       .catch((e) => {
         // Aborted superseded request — not an error worth showing.
         if (controller.signal.aborted) return;
-        setError(e.message || 'Failed to load.');
+        setError(e.message || t('table.failedLoad'));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -76,7 +78,7 @@ function DataTableInner<T extends { id: number }>({
     // Abort the in-flight request when params change or on unmount, so a
     // slow earlier response can never overwrite newer results.
     return () => controller.abort();
-  }, [endpoint, page, debouncedSearch, extraParams, reloadKey]);
+  }, [endpoint, page, debouncedSearch, extraParams, reloadKey, t]);
 
   const colCount = columns.length + (actions ? 1 : 0);
 
@@ -85,12 +87,12 @@ function DataTableInner<T extends { id: number }>({
       {searchable && (
         <div className="mb-3">
           <label htmlFor={`datatable-search-${endpoint}`} className="sr-only">
-            Search
+            {t('table.searchLabel')}
           </label>
           <input
             id={`datatable-search-${endpoint}`}
             className="input max-w-xs"
-            placeholder="Search..."
+            placeholder={t('table.searchPlaceholder')}
             autoComplete="off"
             value={search}
             onChange={(e) => {
@@ -112,7 +114,7 @@ function DataTableInner<T extends { id: number }>({
               ))}
               {actions && (
                 <th scope="col" className="text-right">
-                  Actions
+                  {t('table.actions')}
                 </th>
               )}
             </tr>
@@ -136,7 +138,7 @@ function DataTableInner<T extends { id: number }>({
             {!loading && !error && data?.data.length === 0 && (
               <tr>
                 <td colSpan={colCount} className="text-center py-6 text-koperasi-400">
-                  No records found.
+                  {t('table.noRecords')}
                 </td>
               </tr>
             )}
@@ -182,7 +184,7 @@ function DataTableInner<T extends { id: number }>({
       {data && data.last_page > 1 && (
         <div className="flex items-center justify-between mt-3 text-sm text-koperasi-500">
           <span>
-            Page {data.current_page} of {data.last_page} ({data.total} total)
+            {t('table.pageOf', { current: data.current_page, last: data.last_page, total: data.total })}
           </span>
           <div className="space-x-2">
             <button
@@ -191,7 +193,7 @@ function DataTableInner<T extends { id: number }>({
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
-              Previous
+              {t('table.previous')}
             </button>
             <button
               type="button"
@@ -199,7 +201,7 @@ function DataTableInner<T extends { id: number }>({
               disabled={page >= data.last_page}
               onClick={() => setPage((p) => p + 1)}
             >
-              Next
+              {t('table.next')}
             </button>
           </div>
         </div>

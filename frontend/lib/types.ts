@@ -8,6 +8,8 @@ export interface StaffUser {
   role: StaffRole;
   phone: string | null;
   shift_label: string | null;
+  avatar_path: string | null;
+  locale: string;
   is_active: boolean;
 }
 
@@ -18,6 +20,8 @@ export interface Member {
   email: string | null;
   phone: string | null;
   address: string | null;
+  avatar_path: string | null;
+  locale: string;
   join_date: string;
   shu_balance: string;
   is_active: boolean;
@@ -66,7 +70,13 @@ export interface RestockingRecord {
   quantity: number;
   cost_per_unit: string;
   total_cost: string;
-  submitted_by: number;
+  /**
+   * The FK attribute AND the eager-loaded `submittedBy` relation both
+   * serialize to the `submitted_by` JSON key (Laravel snake_cases relation
+   * names), so when the relation is loaded this arrives as the staff object
+   * instead of the id. Accept both shapes; the detail view normalizes.
+   */
+  submitted_by: number | StaffUser;
   submittedBy?: StaffUser;
   notes: string | null;
   restocked_at: string;

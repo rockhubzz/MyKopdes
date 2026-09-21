@@ -4,6 +4,7 @@ import { useState } from 'react';
 import DataTable, { Column } from '@/components/DataTable';
 import DetailModal, { DetailTarget } from '@/components/details/DetailModal';
 import { apiFetch, ApiError } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Member } from '@/lib/types';
 
 const emptyForm = { name: '', email: '', phone: '', address: '', password: '' };
@@ -16,6 +17,7 @@ export default function MembersPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [created, setCreated] = useState<Member | null>(null);
+  const { t } = useLanguage();
 
   function openCreate() {
     setEditing(null);
@@ -47,27 +49,27 @@ export default function MembersPage() {
       }
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+      setError(err instanceof ApiError ? err.message : t('members.saveFailed'));
     }
   }
 
   async function handleDeactivate(m: Member) {
-    if (!confirm(`Deactivate membership for ${m.name}?`)) return;
+    if (!confirm(t('members.deactivateConfirm', { name: m.name }))) return;
     await apiFetch(`/members/${m.id}`, { method: 'DELETE' });
     setReloadKey((k) => k + 1);
   }
 
   const columns: Column<Member>[] = [
-    { header: 'Membership ID', render: (m) => <code className="text-xs">{m.membership_id}</code> },
-    { header: 'Name', render: (m) => m.name },
-    { header: 'Phone', render: (m) => m.phone ?? '—' },
-    { header: 'SHU Balance', render: (m) => `Rp ${Number(m.shu_balance).toLocaleString('id-ID')}` },
-    { header: 'Joined', render: (m) => m.join_date },
+    { header: t('members.colId'), render: (m) => <code className="text-xs">{m.membership_id}</code> },
+    { header: t('members.colName'), render: (m) => m.name },
+    { header: t('members.colPhone'), render: (m) => m.phone ?? '—' },
+    { header: t('members.colShu'), render: (m) => `Rp ${Number(m.shu_balance).toLocaleString('id-ID')}` },
+    { header: t('members.colJoined'), render: (m) => new Date(m.join_date).toLocaleDateString('id-ID') },
     {
-      header: 'Status',
+      header: t('members.colStatus'),
       render: (m) => (
         <span className={`badge ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {m.is_active ? 'Active' : 'Inactive'}
+          {m.is_active ? t('common.active') : t('common.inactive')}
         </span>
       ),
     },
@@ -76,9 +78,9 @@ export default function MembersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-koperasi-800">Members</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('members.title')}</h1>
         <button className="btn-primary" onClick={openCreate}>
-          + Enroll Member
+          {t('members.enrollMember')}
         </button>
       </div>
 
@@ -89,12 +91,12 @@ export default function MembersPage() {
         onRowClick={(m) => setDetail({ entity: 'member', id: m.id })}
         reloadKey={reloadKey}
         actions={(m) => (
-          <div className="space-x-2">
-            <button className="text-koperasi-600 hover:underline text-sm" onClick={() => openEdit(m)}>
-              Edit
+          <div className="flex justify-end gap-1.5">
+            <button className="btn-action-edit" onClick={() => openEdit(m)}>
+              {t('members.edit')}
             </button>
-            <button className="text-red-600 hover:underline text-sm" onClick={() => handleDeactivate(m)}>
-              Deactivate
+            <button className="btn-action-danger" onClick={() => handleDeactivate(m)}>
+              {t('members.deactivate')}
             </button>
           </div>
         )}
@@ -103,38 +105,38 @@ export default function MembersPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="card w-full max-w-sm">
-            <h2 className="font-semibold text-lg mb-4">{editing ? 'Edit Member' : 'Enroll Member'}</h2>
+            <h2 className="font-semibold text-lg mb-4">{editing ? t('members.editTitle') : t('members.enrollTitle')}</h2>
 
             {created ? (
               <div className="space-y-3 text-sm">
                 <p className="text-green-700">
-                  Member enrolled! Give them their membership ID to log in and to present at checkout:
+                  {t('members.enrolledMsg')}
                 </p>
                 <p className="text-lg font-mono bg-koperasi-50 rounded-lg px-3 py-2 text-center">{created.membership_id}</p>
                 <button className="btn-primary w-full" onClick={() => setShowForm(false)}>
-                  Done
+                  {t('members.done')}
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
-                  <label className="label">Name</label>
+                  <label className="label">{t('members.name')}</label>
                   <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 </div>
                 <div>
-                  <label className="label">Phone (used for lookup at checkout)</label>
+                  <label className="label">{t('members.phoneLookup')}</label>
                   <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Email (optional)</label>
+                  <label className="label">{t('members.emailOpt')}</label>
                   <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Address</label>
+                  <label className="label">{t('members.address')}</label>
                   <textarea className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Password {editing && '(leave blank to keep current)'}</label>
+                  <label className="label">{editing ? t('members.passwordKeep') : t('members.password')}</label>
                   <input
                     className="input"
                     type="password"
@@ -146,10 +148,10 @@ export default function MembersPage() {
                 {error && <p className="text-sm text-red-600">{error}</p>}
                 <div className="flex justify-end gap-2 pt-2">
                   <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button type="submit" className="btn-primary">
-                    Save
+                    {t('common.save')}
                   </button>
                 </div>
               </form>

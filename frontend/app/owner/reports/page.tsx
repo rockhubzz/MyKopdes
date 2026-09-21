@@ -5,6 +5,7 @@ import StatCard from '@/components/StatCard';
 import { apiUrl, apiFetch } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface Summary {
   revenue: number; cost_of_goods_sold: number; profit: number; profit_margin_pct: number;
@@ -26,6 +27,7 @@ export default function ReportsPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [bestSellers, setBestSellers] = useState<BestSeller[]>([]);
   const [stock, setStock] = useState<StockValuation | null>(null);
+  const { t } = useLanguage();
 
   // Date inputs fire on every keystroke/selection — wait for a pause before
   // refetching so picking a date doesn't hammer the API.
@@ -79,50 +81,50 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-koperasi-800">Reports</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('reports.title')}</h1>
         <div className="flex items-center gap-2 text-sm">
           <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <span>to</span>
+          <span>{t('reports.to')}</span>
           <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Revenue" value={summary ? formatRp(summary.revenue) : '...'} />
-        <StatCard label="Profit" value={summary ? formatRp(summary.profit) : '...'} accent="harvest" />
-        <StatCard label="Profit Margin" value={summary ? `${summary.profit_margin_pct}%` : '...'} />
-        <StatCard label="Transactions" value={summary?.transaction_count ?? '...'} />
+        <StatCard label={t('reports.revenue')} value={summary ? formatRp(summary.revenue) : '...'} />
+        <StatCard label={t('reports.profit')} value={summary ? formatRp(summary.profit) : '...'} accent="harvest" />
+        <StatCard label={t('reports.profitMargin')} value={summary ? `${summary.profit_margin_pct}%` : '...'} />
+        <StatCard label={t('reports.transactions')} value={summary?.transaction_count ?? '...'} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="card">
-          <h2 className="font-semibold text-koperasi-800 mb-3">Best-Selling Items</h2>
+          <h2 className="font-semibold text-koperasi-800 mb-3">{t('reports.bestSellers')}</h2>
           <ul className="space-y-2 text-sm">
             {bestSellers.map((b) => (
               <li key={b.sku} className="flex justify-between border-b border-koperasi-50 pb-1">
                 <span>{b.name}</span>
-                <span className="text-koperasi-500">{b.units_sold} units · {formatRp(b.revenue)}</span>
+                <span className="text-koperasi-500">{t('reports.unitsSold', { units: b.units_sold, revenue: formatRp(b.revenue) })}</span>
               </li>
             ))}
-            {bestSellers.length === 0 && <li className="text-koperasi-400">No sales in this period.</li>}
+            {bestSellers.length === 0 && <li className="text-koperasi-400">{t('reports.noSales')}</li>}
           </ul>
         </div>
 
         <div className="card space-y-2">
-          <h2 className="font-semibold text-koperasi-800 mb-1">Stock Valuation</h2>
-          <div className="flex justify-between text-sm"><span>Value at Cost</span><span>{stock ? formatRp(stock.total_value_at_cost) : '...'}</span></div>
-          <div className="flex justify-between text-sm"><span>Value at Retail</span><span>{stock ? formatRp(stock.total_value_at_retail) : '...'}</span></div>
-          <div className="flex justify-between text-sm font-medium"><span>Potential Profit if Sold</span><span>{stock ? formatRp(stock.potential_profit_if_all_sold) : '...'}</span></div>
-          <div className="flex justify-between text-sm text-red-600"><span>Low Stock Items</span><span>{stock?.low_stock_count ?? '...'}</span></div>
+          <h2 className="font-semibold text-koperasi-800 mb-1">{t('reports.stockValuation')}</h2>
+          <div className="flex justify-between text-sm"><span>{t('reports.valueCost')}</span><span>{stock ? formatRp(stock.total_value_at_cost) : '...'}</span></div>
+          <div className="flex justify-between text-sm"><span>{t('reports.valueRetail')}</span><span>{stock ? formatRp(stock.total_value_at_retail) : '...'}</span></div>
+          <div className="flex justify-between text-sm font-medium"><span>{t('reports.potentialProfit')}</span><span>{stock ? formatRp(stock.potential_profit_if_all_sold) : '...'}</span></div>
+          <div className="flex justify-between text-sm text-red-600"><span>{t('reports.lowStock')}</span><span>{stock?.low_stock_count ?? '...'}</span></div>
         </div>
       </div>
 
       <div className="card">
-        <h2 className="font-semibold text-koperasi-800 mb-3">Export Transactions ({from} – {to})</h2>
+        <h2 className="font-semibold text-koperasi-800 mb-3">{t('reports.exportTitle', { from, to })}</h2>
         <div className="flex gap-2">
-          <button className="btn-secondary" onClick={() => handleExport('csv')}>Export CSV</button>
-          <button className="btn-secondary" onClick={() => handleExport('xlsx')}>Export Excel</button>
-          <button className="btn-secondary" onClick={() => handleExport('pdf')}>Export PDF</button>
+          <button className="btn-secondary" onClick={() => handleExport('csv')}>{t('reports.exportCsv')}</button>
+          <button className="btn-secondary" onClick={() => handleExport('xlsx')}>{t('reports.exportExcel')}</button>
+          <button className="btn-secondary" onClick={() => handleExport('pdf')}>{t('reports.exportPdf')}</button>
         </div>
       </div>
     </div>

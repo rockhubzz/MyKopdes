@@ -2,12 +2,16 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Wheat } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { dashboardPathFor, setSession } from '@/lib/auth';
+import { useLanguage, normalizeLocale } from '@/lib/i18n/LanguageContext';
+import LanguageToggle from '@/components/LanguageToggle';
 import type { Member, Role, StaffUser } from '@/lib/types';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t, setLang } = useLanguage();
   const [mode, setMode] = useState<'staff' | 'member'>('staff');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +30,8 @@ export default function LoginPage() {
         });
         const role: Role = res.user.role;
         setSession(res.token, role);
+        // Adopt the account's saved language (falls back to English).
+        setLang(normalizeLocale(res.user.locale));
         router.push(dashboardPathFor(role));
       } else {
         const res = await apiFetch<{ token: string; member: Member }>('/auth/member/login', {
@@ -33,24 +39,28 @@ export default function LoginPage() {
           body: { identifier, password },
         });
         setSession(res.token, 'member');
+        setLang(normalizeLocale(res.member.locale));
         router.push(dashboardPathFor('member'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t('login.fallbackError'));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-koperasi-900 via-koperasi-800 to-koperasi-600 px-4 py-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-koperasi-900 via-koperasi-800 to-koperasi-600 px-4 py-8 relative">
+      <div className="absolute top-4 right-4">
+        <LanguageToggle dark />
+      </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="text-4xl mb-2" aria-hidden="true">
-            🌾
+          <div className="mb-2 flex justify-center text-harvest-400" aria-hidden="true">
+            <Wheat size={40} />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Koperasi Store</h1>
-          <p className="text-koperasi-100/90 text-sm mt-1">Village cooperative management system</p>
+          <p className="text-koperasi-100/90 text-sm mt-1">{t('login.tagline')}</p>
         </div>
 
         <div className="card shadow-xl">
@@ -67,7 +77,7 @@ export default function LoginPage() {
                   mode === m ? 'bg-white shadow text-koperasi-800' : 'text-koperasi-600'
                 }`}
               >
-                {m === 'staff' ? 'Staff Login' : 'Member Login'}
+                {m === 'staff' ? t('login.staffLogin') : t('login.memberLogin')}
               </button>
             ))}
           </div>
@@ -75,7 +85,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="login-identifier" className="label">
-                {mode === 'staff' ? 'Email' : 'Membership ID or Phone'}
+                {mode === 'staff' ? t('login.email') : t('login.memberIdOrPhone')}
               </label>
               <input
                 id="login-identifier"
@@ -83,14 +93,14 @@ export default function LoginPage() {
                 type={mode === 'staff' ? 'email' : 'text'}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={mode === 'staff' ? 'admin@koperasi.test' : 'KOP-26-XXXXX or 0813...'}
+                placeholder={mode === 'staff' ? t('login.emailPlaceholder') : t('login.memberPlaceholder')}
                 autoComplete={mode === 'staff' ? 'email' : 'username'}
                 required
               />
             </div>
             <div>
               <label htmlFor="login-password" className="label">
-                Password
+                {t('login.password')}
               </label>
               <input
                 id="login-password"
@@ -110,12 +120,12 @@ export default function LoginPage() {
             )}
 
             <button type="submit" className="btn-primary w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? t('login.signingIn') : t('login.signIn')}
             </button>
           </form>
 
           <p className="text-xs text-koperasi-400 mt-4 text-center">
-            Demo: admin@koperasi.test / owner@koperasi.test / kasir1@koperasi.test — password &quot;password&quot;
+            {t('login.demoHint')}
           </p>
         </div>
       </div>

@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch, storageUrl } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Item, ItemCategory, Paginated, RestockingRecord } from '@/lib/types';
 import type { DetailTarget } from './DetailModal';
 import { Drill, EmptyNote, Field, Section, formatDate, formatRp } from './ui';
 
 function Loading() {
+  const { t } = useLanguage();
   return (
-    <div className="space-y-2" aria-label="Loading details">
+    <div className="space-y-2" aria-label={t('details.loading')}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="skeleton h-5 rounded" />
       ))}
@@ -28,6 +30,7 @@ export function ItemDetails({ id, navigate }: { id: number; navigate: (t: Detail
   const [item, setItem] = useState<Item | null>(null);
   const [restocks, setRestocks] = useState<RestockingRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     let cancelled = false;
@@ -43,12 +46,12 @@ export function ItemDetails({ id, navigate }: { id: number; navigate: (t: Detail
         if (!cancelled && res) setRestocks(res.data);
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message || 'Failed to load item.');
+        if (!cancelled) setError(e.message || t('details.failedItem'));
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   if (error) return <Failed message={error} />;
   if (!item) return <Loading />;
@@ -77,35 +80,35 @@ export function ItemDetails({ id, navigate }: { id: number; navigate: (t: Detail
           </div>
         </div>
         <span className={`badge ml-auto shrink-0 ${item.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {item.is_active ? 'Active' : 'Inactive'}
+          {item.is_active ? t('details.active') : t('details.inactive')}
         </span>
       </div>
 
-      <Section title="Pricing & stock">
-        <Field label="Selling price">{formatRp(item.unit_price)}</Field>
-        <Field label="Cost price">{formatRp(item.cost_price)}</Field>
-        <Field label="Unit">{item.unit_of_measure}</Field>
-        <Field label="Current stock">
+      <Section title={t('details.pricingStock')}>
+        <Field label={t('details.sellingPrice')}>{formatRp(item.unit_price)}</Field>
+        <Field label={t('details.costPrice')}>{formatRp(item.cost_price)}</Field>
+        <Field label={t('details.unit')}>{item.unit_of_measure}</Field>
+        <Field label={t('details.currentStock')}>
           <span className={lowStock ? 'text-red-600 font-bold' : ''}>
             {item.current_stock}
-            {lowStock ? ' (low!)' : ''}
+            {lowStock ? ` ${t('details.lowSuffix')}` : ''}
           </span>
         </Field>
-        <Field label="Low-stock threshold">{item.min_stock_threshold}</Field>
-        <Field label="Expiry">{formatDate(item.expiry_date)}</Field>
+        <Field label={t('details.lowThreshold')}>{item.min_stock_threshold}</Field>
+        <Field label={t('details.expiry')}>{formatDate(item.expiry_date)}</Field>
       </Section>
 
-      <Section title="Category">
+      <Section title={t('details.categorySection')}>
         {item.category ? (
           <Drill onOpen={() => navigate({ entity: 'category', id: item.category!.id })}>{item.category.name}</Drill>
         ) : (
-          <EmptyNote>Uncategorized.</EmptyNote>
+          <EmptyNote>{t('details.uncategorized')}</EmptyNote>
         )}
       </Section>
 
-      <Section title="Recent restocks">
+      <Section title={t('details.recentRestocks')}>
         {restocks.length === 0 ? (
-          <EmptyNote>No restock records for this item yet.</EmptyNote>
+          <EmptyNote>{t('details.noRestocksItem')}</EmptyNote>
         ) : (
           <ul className="divide-y divide-koperasi-50">
             {restocks.map((r) => (
@@ -133,6 +136,7 @@ export function CategoryDetails({ id, navigate }: { id: number; navigate: (t: De
   const [items, setItems] = useState<Item[]>([]);
   const [itemsTotal, setItemsTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     let cancelled = false;
@@ -151,12 +155,12 @@ export function CategoryDetails({ id, navigate }: { id: number; navigate: (t: De
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message || 'Failed to load category.');
+        if (!cancelled) setError(e.message || t('details.failedCategory'));
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   if (error) return <Failed message={error} />;
   if (!category) return <Loading />;
@@ -166,9 +170,9 @@ export function CategoryDetails({ id, navigate }: { id: number; navigate: (t: De
       <div className="font-bold text-lg text-koperasi-800">{category.name}</div>
       {category.description && <p className="text-sm text-koperasi-500 mt-1">{category.description}</p>}
 
-      <Section title={`Items in this category (${itemsTotal})`}>
+      <Section title={t('details.itemsInCategory', { count: itemsTotal })}>
         {items.length === 0 ? (
-          <EmptyNote>No items in this category yet.</EmptyNote>
+          <EmptyNote>{t('details.noItemsCategory')}</EmptyNote>
         ) : (
           <ul className="divide-y divide-koperasi-50">
             {items.map((i) => (
@@ -177,7 +181,7 @@ export function CategoryDetails({ id, navigate }: { id: number; navigate: (t: De
                   <span className="min-w-0">
                     <span className="font-medium text-koperasi-800 block truncate">{i.name}</span>
                     <span className="text-xs text-koperasi-400">
-                      {i.sku} · stock {i.current_stock}
+                      {i.sku} · {t('details.stockOf', { count: i.current_stock })}
                     </span>
                   </span>
                   <span className="text-koperasi-600 tabular-nums shrink-0">{formatRp(i.unit_price)}</span>

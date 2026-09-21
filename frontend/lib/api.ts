@@ -1,4 +1,5 @@
 import { clearSession, getToken } from './auth';
+import { getStoredLanguage, translate } from './i18n/LanguageContext';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
 
@@ -67,7 +68,7 @@ async function doFetch<T = unknown>(path: string, options: RequestOptions = {}):
     // navigation is caught by middleware.ts and sent back to /login.
     clearSession();
     if (typeof window !== 'undefined') window.location.href = '/login';
-    throw new ApiError(401, 'Session expired. Please log in again.');
+    throw new ApiError(401, translate(getStoredLanguage(), 'api.sessionExpired'));
   }
 
   if (res.status === 204) {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import DataTable, { Column } from '@/components/DataTable';
 import DetailModal, { DetailTarget } from '@/components/details/DetailModal';
 import { apiFetch, ApiError } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { ItemCategory } from '@/lib/types';
 
 export default function CategoriesPage() {
@@ -13,6 +14,7 @@ export default function CategoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
+  const { t } = useLanguage();
 
   function openCreate() {
     setEditing(null);
@@ -40,32 +42,32 @@ export default function CategoriesPage() {
       setShowForm(false);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+      setError(err instanceof ApiError ? err.message : t('categories.saveFailed'));
     }
   }
 
   async function handleDelete(c: ItemCategory) {
-    if (!confirm(`Delete category "${c.name}"?`)) return;
+    if (!confirm(t('categories.deleteConfirm', { name: c.name }))) return;
     try {
       await apiFetch(`/item-categories/${c.id}`, { method: 'DELETE' });
       setReloadKey((k) => k + 1);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to delete.');
+      alert(err instanceof ApiError ? err.message : t('categories.deleteFailed'));
     }
   }
 
   const columns: Column<ItemCategory>[] = [
-    { header: 'Name', render: (c) => c.name },
-    { header: 'Description', render: (c) => c.description ?? '—' },
-    { header: 'Items', render: (c) => c.items_count ?? 0 },
+    { header: t('categories.colName'), render: (c) => c.name },
+    { header: t('categories.colDesc'), render: (c) => c.description ?? '—' },
+    { header: t('categories.colItems'), render: (c) => c.items_count ?? 0 },
   ];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-koperasi-800">Item Categories</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('categories.title')}</h1>
         <button className="btn-primary" onClick={openCreate}>
-          + Add Category
+          {t('categories.addCategory')}
         </button>
       </div>
 
@@ -76,12 +78,12 @@ export default function CategoriesPage() {
         onRowClick={(c) => setDetail({ entity: 'category', id: c.id })}
         reloadKey={reloadKey}
         actions={(c) => (
-          <div className="space-x-2">
-            <button className="text-koperasi-600 hover:underline text-sm" onClick={() => openEdit(c)}>
-              Edit
+          <div className="flex justify-end gap-1.5">
+            <button className="btn-action-edit" onClick={() => openEdit(c)}>
+              {t('categories.edit')}
             </button>
-            <button className="text-red-600 hover:underline text-sm" onClick={() => handleDelete(c)}>
-              Delete
+            <button className="btn-action-danger" onClick={() => handleDelete(c)}>
+              {t('categories.delete')}
             </button>
           </div>
         )}
@@ -90,23 +92,23 @@ export default function CategoriesPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="card w-full max-w-sm">
-            <h2 className="font-semibold text-lg mb-4">{editing ? 'Edit Category' : 'Add Category'}</h2>
+            <h2 className="font-semibold text-lg mb-4">{editing ? t('categories.editTitle') : t('categories.addTitle')}</h2>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="label">Name</label>
+                <label className="label">{t('categories.name')}</label>
                 <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div>
-                <label className="label">Description</label>
+                <label className="label">{t('categories.description')}</label>
                 <textarea className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary">
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </form>

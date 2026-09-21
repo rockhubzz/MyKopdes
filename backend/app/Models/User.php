@@ -22,7 +22,7 @@ class User extends Authenticatable
     public const ROLES = [self::ROLE_ADMIN, self::ROLE_SHOP_OWNER, self::ROLE_EMPLOYEE];
 
     protected $fillable = [
-        'name', 'email', 'password', 'role', 'phone', 'shift_label', 'is_active',
+        'name', 'email', 'password', 'role', 'phone', 'shift_label', 'avatar_path', 'locale', 'is_active',
     ];
 
     protected $hidden = ['password', 'remember_token'];

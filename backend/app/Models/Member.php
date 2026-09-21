@@ -12,7 +12,7 @@ class Member extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'membership_id', 'name', 'email', 'password', 'phone', 'address',
+        'membership_id', 'name', 'email', 'password', 'phone', 'address', 'avatar_path', 'locale',
         'join_date', 'shu_balance', 'is_active',
     ];
 

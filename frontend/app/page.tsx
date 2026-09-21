@@ -3,9 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { dashboardPathFor, getRole } from '@/lib/auth';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function RootPage() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   useEffect(() => {
     const role = getRole();
@@ -14,7 +16,7 @@ export default function RootPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center text-koperasi-500">
-      Loading...
+      {t('root.loading')}
     </div>
   );
 }

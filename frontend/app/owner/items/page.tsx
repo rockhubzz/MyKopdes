@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import DataTable, { Column } from '@/components/DataTable';
 import DetailModal, { DetailTarget } from '@/components/details/DetailModal';
 import { apiFetch, storageUrl, ApiError } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Item, ItemCategory, Paginated } from '@/lib/types';
 
 const emptyForm = {
@@ -21,6 +22,7 @@ export default function ItemsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     apiFetch<Paginated<ItemCategory>>('/item-categories?per_page=100').then((res) => setCategories(res.data));
@@ -63,19 +65,19 @@ export default function ItemsPage() {
       setShowForm(false);
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+      setError(err instanceof ApiError ? err.message : t('items.saveFailed'));
     }
   }
 
   async function handleDeactivate(item: Item) {
-    if (!confirm(`Deactivate "${item.name}"?`)) return;
+    if (!confirm(t('items.deactivateConfirm', { name: item.name }))) return;
     await apiFetch(`/items/${item.id}`, { method: 'DELETE' });
     setReloadKey((k) => k + 1);
   }
 
   const columns: Column<Item>[] = [
     {
-      header: 'Item',
+      header: t('items.colItem'),
       render: (i) => (
         <div className="flex items-center gap-2">
           {i.image_path && (
@@ -89,10 +91,10 @@ export default function ItemsPage() {
         </div>
       ),
     },
-    { header: 'Category', render: (i) => i.category?.name ?? '—' },
-    { header: 'Price', render: (i) => `Rp ${Number(i.unit_price).toLocaleString('id-ID')}` },
+    { header: t('items.colCategory'), render: (i) => i.category?.name ?? '—' },
+    { header: t('items.colPrice'), render: (i) => `Rp ${Number(i.unit_price).toLocaleString('id-ID')}` },
     {
-      header: 'Stock',
+      header: t('items.colStock'),
       render: (i) => (
         <span className={i.current_stock <= i.min_stock_threshold ? 'text-red-600 font-medium' : ''}>
           {i.current_stock} {i.unit_of_measure}
@@ -100,10 +102,10 @@ export default function ItemsPage() {
       ),
     },
     {
-      header: 'Status',
+      header: t('items.colStatus'),
       render: (i) => (
         <span className={`badge ${i.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {i.is_active ? 'Active' : 'Inactive'}
+          {i.is_active ? t('common.active') : t('common.inactive')}
         </span>
       ),
     },
@@ -112,14 +114,14 @@ export default function ItemsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-koperasi-800">Items</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('items.title')}</h1>
         <div className="flex items-center gap-3">
           <label className="text-sm flex items-center gap-1">
             <input type="checkbox" checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} />
-            Low stock only
+            {t('items.lowStockOnly')}
           </label>
           <button className="btn-primary" onClick={openCreate}>
-            + Add Item
+            {t('items.addItem')}
           </button>
         </div>
       </div>
@@ -132,12 +134,12 @@ export default function ItemsPage() {
         reloadKey={reloadKey}
         extraParams={lowStockOnly ? '&low_stock=1' : ''}
         actions={(i) => (
-          <div className="space-x-2">
-            <button className="text-koperasi-600 hover:underline text-sm" onClick={() => openEdit(i)}>
-              Edit
+          <div className="flex justify-end gap-1.5">
+            <button className="btn-action-edit" onClick={() => openEdit(i)}>
+              {t('items.edit')}
             </button>
-            <button className="text-red-600 hover:underline text-sm" onClick={() => handleDeactivate(i)}>
-              Deactivate
+            <button className="btn-action-danger" onClick={() => handleDeactivate(i)}>
+              {t('items.deactivate')}
             </button>
           </div>
         )}
@@ -146,26 +148,26 @@ export default function ItemsPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card w-full max-w-md my-8">
-            <h2 className="font-semibold text-lg mb-4">{editing ? 'Edit Item' : 'Add Item'}</h2>
+            <h2 className="font-semibold text-lg mb-4">{editing ? t('items.editTitle') : t('items.addTitle')}</h2>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="label">Name</label>
+                <label className="label">{t('items.name')}</label>
                 <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">SKU</label>
+                  <label className="label">{t('items.sku')}</label>
                   <input className="input" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required />
                 </div>
                 <div>
-                  <label className="label">Barcode</label>
+                  <label className="label">{t('items.barcode')}</label>
                   <input className="input" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
                 </div>
               </div>
               <div>
-                <label className="label">Category</label>
+                <label className="label">{t('items.category')}</label>
                 <select className="input" value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-                  <option value="">— None —</option>
+                  <option value="">{t('common.noneOption')}</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -175,21 +177,21 @@ export default function ItemsPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Unit Price (Rp)</label>
+                  <label className="label">{t('items.unitPrice')}</label>
                   <input className="input" type="number" value={form.unit_price} onChange={(e) => setForm({ ...form, unit_price: e.target.value })} required />
                 </div>
                 <div>
-                  <label className="label">Cost Price (Rp)</label>
+                  <label className="label">{t('items.costPrice')}</label>
                   <input className="input" type="number" value={form.cost_price} onChange={(e) => setForm({ ...form, cost_price: e.target.value })} required />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Unit of Measure</label>
+                  <label className="label">{t('items.unitMeasure')}</label>
                   <input className="input" value={form.unit_of_measure} onChange={(e) => setForm({ ...form, unit_of_measure: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Min Stock Threshold</label>
+                  <label className="label">{t('items.minThreshold')}</label>
                   <input
                     className="input"
                     type="number"
@@ -199,16 +201,16 @@ export default function ItemsPage() {
                 </div>
               </div>
               <div>
-                <label className="label">Expiry Date (optional)</label>
+                <label className="label">{t('items.expiryOpt')}</label>
                 <input className="input" type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} />
               </div>
               <div>
-                <label className="label">Image (optional)</label>
+                <label className="label">{t('items.imageOpt')}</label>
                 <input className="input" type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] ?? null)} />
               </div>
               {editing && (
                 <p className="text-xs text-koperasi-400">
-                  Current stock ({editing.current_stock}) can&apos;t be edited here — use Restock to add stock.
+                  {t('items.stockNote', { stock: editing.current_stock })}
                 </p>
               )}
 
@@ -216,10 +218,10 @@ export default function ItemsPage() {
 
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary">
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </form>

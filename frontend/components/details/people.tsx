@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, storageUrl } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { AuditLog, Member, Paginated, RestockingRecord, StaffUser, Supplier, Transaction } from '@/lib/types';
 import type { DetailTarget } from './DetailModal';
 import { EmptyNote, Field, Section, formatDate, formatDateTime, formatRp } from './ui';
 
 function Loading() {
+  const { t } = useLanguage();
   return (
-    <div className="space-y-2" aria-label="Loading details">
+    <div className="space-y-2" aria-label={t('details.loading')}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="skeleton h-5 rounded" />
       ))}
@@ -29,6 +31,7 @@ type SupplierWithRecords = Supplier & { restockingRecords?: RestockingRecord[] }
 export function SupplierDetails({ id, navigate }: { id: number; navigate: (t: DetailTarget) => void }) {
   const [supplier, setSupplier] = useState<SupplierWithRecords | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     let cancelled = false;
@@ -39,12 +42,12 @@ export function SupplierDetails({ id, navigate }: { id: number; navigate: (t: De
         if (!cancelled) setSupplier(res);
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message || 'Failed to load supplier.');
+        if (!cancelled) setError(e.message || t('details.failedSupplier'));
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   if (error) return <Failed message={error} />;
   if (!supplier) return <Loading />;
@@ -52,25 +55,25 @@ export function SupplierDetails({ id, navigate }: { id: number; navigate: (t: De
   return (
     <div>
       <div className="font-bold text-lg text-koperasi-800">{supplier.name}</div>
-      {supplier.contact_person && <div className="text-sm text-koperasi-500">Contact: {supplier.contact_person}</div>}
+      {supplier.contact_person && <div className="text-sm text-koperasi-500">{t('details.contactWith', { name: supplier.contact_person })}</div>}
 
-      <Section title="Contact">
-        <Field label="Phone">{supplier.phone ?? '—'}</Field>
-        <Field label="Email">{supplier.email ?? '—'}</Field>
-        <Field label="Address">{supplier.address ?? '—'}</Field>
-        {supplier.notes && <Field label="Notes">{supplier.notes}</Field>}
+      <Section title={t('details.contact')}>
+        <Field label={t('details.phone')}>{supplier.phone ?? '—'}</Field>
+        <Field label={t('details.email')}>{supplier.email ?? '—'}</Field>
+        <Field label={t('details.address')}>{supplier.address ?? '—'}</Field>
+        {supplier.notes && <Field label={t('details.notes')}>{supplier.notes}</Field>}
       </Section>
 
-      <Section title="Recent restocks from this supplier">
+      <Section title={t('details.recentRestocksSupplier')}>
         {!supplier.restockingRecords || supplier.restockingRecords.length === 0 ? (
-          <EmptyNote>No restock records from this supplier yet.</EmptyNote>
+          <EmptyNote>{t('details.noRestocksSupplier')}</EmptyNote>
         ) : (
           <ul className="divide-y divide-koperasi-50">
             {supplier.restockingRecords.map((r) => (
               <li key={r.id} className="py-2 flex justify-between gap-2 text-sm">
                 <button type="button" className="text-left hover:underline min-w-0" onClick={() => navigate({ entity: 'restock', id: r.id })}>
                   <span className="font-medium text-koperasi-800">
-                    {r.item ? r.item.name : `Item #${r.item_id}`}
+                    {r.item ? r.item.name : t('details.itemHash', { id: r.item_id })}
                   </span>{' '}
                   <span className="text-koperasi-500">× {r.quantity}</span>
                   <span className="text-xs text-koperasi-400 block">{formatDate(r.restocked_at)}</span>
@@ -90,6 +93,7 @@ type MemberWithTransactions = Member & { transactions?: Transaction[] };
 export function MemberDetails({ id, navigate }: { id: number; navigate: (t: DetailTarget) => void }) {
   const [member, setMember] = useState<MemberWithTransactions | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t, tx } = useLanguage();
 
   useEffect(() => {
     let cancelled = false;
@@ -100,12 +104,12 @@ export function MemberDetails({ id, navigate }: { id: number; navigate: (t: Deta
         if (!cancelled) setMember(res);
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message || 'Failed to load member.');
+        if (!cancelled) setError(e.message || t('details.failedMember'));
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   if (error) return <Failed message={error} />;
   if (!member) return <Loading />;
@@ -113,24 +117,28 @@ export function MemberDetails({ id, navigate }: { id: number; navigate: (t: Deta
   return (
     <div>
       <div className="flex items-center gap-2">
+        {member.avatar_path ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={storageUrl(member.avatar_path)} alt={member.name} width={40} height={40} className="w-10 h-10 rounded-full object-cover shrink-0" />
+        ) : null}
         <div className="font-bold text-lg text-koperasi-800">{member.name}</div>
         <span className={`badge ml-auto shrink-0 ${member.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {member.is_active ? 'Active' : 'Inactive'}
+          {member.is_active ? t('details.active') : t('details.inactive')}
         </span>
       </div>
       <div className="text-xs text-koperasi-400">{member.membership_id}</div>
 
-      <Section title="Profile">
-        <Field label="Phone">{member.phone ?? '—'}</Field>
-        <Field label="Email">{member.email ?? '—'}</Field>
-        <Field label="Address">{member.address ?? '—'}</Field>
-        <Field label="Joined">{formatDate(member.join_date)}</Field>
-        <Field label="SHU balance">{formatRp(member.shu_balance)}</Field>
+      <Section title={t('details.profile')}>
+        <Field label={t('details.phone')}>{member.phone ?? '—'}</Field>
+        <Field label={t('details.email')}>{member.email ?? '—'}</Field>
+        <Field label={t('details.address')}>{member.address ?? '—'}</Field>
+        <Field label={t('details.joined')}>{formatDate(member.join_date)}</Field>
+        <Field label={t('details.shuBalance')}>{formatRp(member.shu_balance)}</Field>
       </Section>
 
-      <Section title="Recent purchases">
+      <Section title={t('details.recentPurchases')}>
         {!member.transactions || member.transactions.length === 0 ? (
-          <EmptyNote>No recorded purchases yet.</EmptyNote>
+          <EmptyNote>{t('details.noPurchases')}</EmptyNote>
         ) : (
           <ul className="divide-y divide-koperasi-50">
             {member.transactions.map((t) => (
@@ -147,7 +155,7 @@ export function MemberDetails({ id, navigate }: { id: number; navigate: (t: Deta
                   <span className="tabular-nums shrink-0">
                     {formatRp(t.total)}{' '}
                     <span className={`badge ml-1 ${t.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {t.payment_status}
+                      {tx(`status.${t.payment_status}`, t.payment_status)}
                     </span>
                   </span>
                 </button>
@@ -164,6 +172,7 @@ export function UserDetails({ id }: { id: number }) {
   const [user, setUser] = useState<StaffUser | null>(null);
   const [activity, setActivity] = useState<AuditLog[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { t, tx } = useLanguage();
 
   useEffect(() => {
     let cancelled = false;
@@ -179,12 +188,12 @@ export function UserDetails({ id }: { id: number }) {
         if (!cancelled && res) setActivity(res.data);
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message || 'Failed to load staff details.');
+        if (!cancelled) setError(e.message || t('details.failedUser'));
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t]);
 
   if (error) return <Failed message={error} />;
   if (!user) return <Loading />;
@@ -192,24 +201,28 @@ export function UserDetails({ id }: { id: number }) {
   return (
     <div>
       <div className="flex items-center gap-2">
+        {user.avatar_path ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={storageUrl(user.avatar_path)} alt={user.name} width={40} height={40} className="w-10 h-10 rounded-full object-cover shrink-0" />
+        ) : null}
         <div className="font-bold text-lg text-koperasi-800">{user.name}</div>
         <span className={`badge ml-auto shrink-0 ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {user.is_active ? 'Active' : 'Inactive'}
+          {user.is_active ? t('details.active') : t('details.inactive')}
         </span>
       </div>
 
-      <Section title="Account">
-        <Field label="Email">{user.email}</Field>
-        <Field label="Role">
-          <span className="badge bg-koperasi-100 text-koperasi-700">{user.role.replace('_', ' ')}</span>
+      <Section title={t('details.account')}>
+        <Field label={t('details.email')}>{user.email}</Field>
+        <Field label={t('details.role')}>
+          <span className="badge bg-koperasi-100 text-koperasi-700">{tx(`roleValue.${user.role}`, user.role.replace('_', ' '))}</span>
         </Field>
-        <Field label="Phone">{user.phone ?? '—'}</Field>
-        <Field label="Shift">{user.shift_label ?? '—'}</Field>
+        <Field label={t('details.phone')}>{user.phone ?? '—'}</Field>
+        <Field label={t('details.shift')}>{user.shift_label ?? '—'}</Field>
       </Section>
 
-      <Section title="Recent activity">
+      <Section title={t('details.recentActivity')}>
         {activity.length === 0 ? (
-          <EmptyNote>No logged activity for this account yet.</EmptyNote>
+          <EmptyNote>{t('details.noActivity')}</EmptyNote>
         ) : (
           <ul className="divide-y divide-koperasi-50">
             {activity.map((a) => (

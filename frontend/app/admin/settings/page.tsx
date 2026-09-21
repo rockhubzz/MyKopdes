@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface SettingsResponse {
   infrastructure: Record<string, string>;
@@ -16,6 +17,7 @@ export default function SettingsPage() {
   const [backup, setBackup] = useState({ backup_schedule_cron: '0 2 * * *' });
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     apiFetch<SettingsResponse>('/admin/settings').then((res) => {
@@ -31,66 +33,63 @@ export default function SettingsPage() {
     setError(null);
     try {
       await apiFetch('/admin/settings', { method: 'PUT', body: { group, values } });
-      setStatus('Saved.');
+      setStatus(t('settings.saved'));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+      setError(err instanceof ApiError ? err.message : t('settings.saveFailed'));
     }
   }
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-koperasi-800">Settings</h1>
+      <h1 className="text-2xl font-bold text-koperasi-800">{t('settings.title')}</h1>
       <p className="text-sm text-koperasi-500 -mt-4">
-        These are stored in the database and take effect immediately — no container redeploy needed. (Changing the DB
-        host/port here updates the record for reference/ops purposes; the running containers still read their
-        bootstrap connection from <code>backend/.env</code> and need a restart to point at a genuinely different
-        database server.)
+        {t('settings.intro')}
       </p>
 
       {status && <p className="text-sm text-green-600">{status}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <section className="card space-y-3">
-        <h2 className="font-semibold text-koperasi-800">Infrastructure</h2>
+        <h2 className="font-semibold text-koperasi-800">{t('settings.infra')}</h2>
         <div>
-          <label className="label">Store Name</label>
+          <label className="label">{t('settings.storeName')}</label>
           <input className="input" value={infra.store_name} onChange={(e) => setInfra({ ...infra, store_name: e.target.value })} />
         </div>
         <div>
-          <label className="label">Store Address</label>
+          <label className="label">{t('settings.storeAddress')}</label>
           <input className="input" value={infra.store_address} onChange={(e) => setInfra({ ...infra, store_address: e.target.value })} />
         </div>
         <div>
-          <label className="label">API Base URL</label>
+          <label className="label">{t('settings.apiBase')}</label>
           <input className="input" value={infra.api_base_url} onChange={(e) => setInfra({ ...infra, api_base_url: e.target.value })} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">DB Host</label>
+            <label className="label">{t('settings.dbHost')}</label>
             <input className="input" value={infra.db_host} onChange={(e) => setInfra({ ...infra, db_host: e.target.value })} />
           </div>
           <div>
-            <label className="label">DB Port</label>
+            <label className="label">{t('settings.dbPort')}</label>
             <input className="input" value={infra.db_port} onChange={(e) => setInfra({ ...infra, db_port: e.target.value })} />
           </div>
         </div>
         <button className="btn-primary" onClick={() => save('infrastructure', infra)}>
-          Save Infrastructure Settings
+          {t('settings.saveInfra')}
         </button>
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-semibold text-koperasi-800">Business Rules</h2>
+        <h2 className="font-semibold text-koperasi-800">{t('settings.businessRules')}</h2>
         <div>
-          <label className="label">Tax Rate (%)</label>
+          <label className="label">{t('settings.taxRate')}</label>
           <input className="input" type="number" step="0.01" value={rules.tax_rate} onChange={(e) => setRules({ ...rules, tax_rate: e.target.value })} />
         </div>
         <div>
-          <label className="label">SHU Rate (fraction of each sale, e.g. 0.02 = 2%)</label>
+          <label className="label">{t('settings.shuRate')}</label>
           <input className="input" type="number" step="0.001" value={rules.shu_rate} onChange={(e) => setRules({ ...rules, shu_rate: e.target.value })} />
         </div>
         <div>
-          <label className="label">Default Low-Stock Threshold</label>
+          <label className="label">{t('settings.lowThreshold')}</label>
           <input
             className="input"
             type="number"
@@ -99,23 +98,23 @@ export default function SettingsPage() {
           />
         </div>
         <button className="btn-primary" onClick={() => save('business_rules', rules)}>
-          Save Business Rules
+          {t('settings.saveRules')}
         </button>
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-semibold text-koperasi-800">Backup Schedule</h2>
+        <h2 className="font-semibold text-koperasi-800">{t('settings.backupSchedule')}</h2>
         <div>
-          <label className="label">Cron Expression</label>
+          <label className="label">{t('settings.cronExpr')}</label>
           <input
             className="input"
             value={backup.backup_schedule_cron}
             onChange={(e) => setBackup({ ...backup, backup_schedule_cron: e.target.value })}
           />
-          <p className="text-xs text-koperasi-400 mt-1">Default: 0 2 * * * (every day at 02:00)</p>
+          <p className="text-xs text-koperasi-400 mt-1">{t('settings.cronDefault')}</p>
         </div>
         <button className="btn-primary" onClick={() => save('backup', backup)}>
-          Save Backup Schedule
+          {t('settings.saveBackup')}
         </button>
       </section>
     </div>

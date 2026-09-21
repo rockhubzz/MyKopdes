@@ -41,6 +41,33 @@ body {
     transition-all disabled:opacity-50 disabled:active:scale-100;
 }
 
+/* Table row action buttons — small pill buttons with tinted backgrounds
+   so Edit / Delete / Void read as buttons, not plain text links. */
+.btn-action {
+  @apply inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap
+    active:scale-[0.97]
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1
+    transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+}
+
+.btn-action-edit {
+  @apply inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap
+    bg-koperasi-100 text-koperasi-700 border border-koperasi-200
+    hover:bg-koperasi-200 hover:text-koperasi-800 hover:border-koperasi-300
+    active:scale-[0.97]
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-koperasi-400 focus-visible:ring-offset-1
+    transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+}
+
+.btn-action-danger {
+  @apply inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap
+    bg-red-50 text-red-700 border border-red-200
+    hover:bg-red-100 hover:text-red-800 hover:border-red-300
+    active:scale-[0.97]
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1
+    transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+}
+
 .input {
   @apply w-full border border-koperasi-200 rounded-lg px-3 py-2 text-sm bg-white
     placeholder:text-koperasi-300

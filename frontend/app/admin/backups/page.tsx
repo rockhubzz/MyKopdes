@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, apiUrl, ApiError } from '@/lib/api';
 import { getToken } from '@/lib/auth';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface BackupFile {
   name: string;
@@ -15,6 +16,7 @@ export default function BackupsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   function load() {
     setLoading(true);
@@ -30,24 +32,24 @@ export default function BackupsPage() {
     setMessage(null);
     try {
       await apiFetch('/backups', { method: 'POST' });
-      setMessage('Backup completed.');
+      setMessage(t('backups.backupDone'));
       load();
     } catch (err) {
-      setMessage(err instanceof ApiError ? err.message : 'Backup failed.');
+      setMessage(err instanceof ApiError ? err.message : t('backups.backupFailed'));
     } finally {
       setBusy(false);
     }
   }
 
   async function restore(filename: string) {
-    if (!confirm(`This will OVERWRITE the current database with "${filename}". Continue?`)) return;
+    if (!confirm(t('backups.restoreConfirm', { file: filename }))) return;
     setBusy(true);
     setMessage(null);
     try {
       await apiFetch('/backups/restore', { method: 'POST', body: { filename } });
-      setMessage('Restore completed.');
+      setMessage(t('backups.restoreDone'));
     } catch (err) {
-      setMessage(err instanceof ApiError ? err.message : 'Restore failed.');
+      setMessage(err instanceof ApiError ? err.message : t('backups.restoreFailed'));
     } finally {
       setBusy(false);
     }
@@ -74,13 +76,13 @@ export default function BackupsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-koperasi-800">Backup & Restore</h1>
+        <h1 className="text-2xl font-bold text-koperasi-800">{t('backups.title')}</h1>
         <button className="btn-primary" onClick={triggerBackup} disabled={busy}>
-          {busy ? 'Working...' : '+ Backup Now'}
+          {busy ? t('backups.working') : t('backups.backupNow')}
         </button>
       </div>
       <p className="text-sm text-koperasi-500 -mt-3">
-        Automated backups also run on the schedule configured under Settings → Backup Schedule.
+        {t('backups.intro')}
       </p>
 
       {message && <p className="text-sm text-koperasi-700">{message}</p>}
@@ -89,24 +91,24 @@ export default function BackupsPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>File</th>
-              <th>Size</th>
-              <th>Created</th>
-              <th className="text-right">Actions</th>
+              <th>{t('backups.colFile')}</th>
+              <th>{t('backups.colSize')}</th>
+              <th>{t('backups.colCreated')}</th>
+              <th className="text-right">{t('backups.colActions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
                 <td colSpan={4} className="text-center py-6 text-koperasi-400">
-                  Loading...
+                  {t('common.loading')}
                 </td>
               </tr>
             )}
             {!loading && files.length === 0 && (
               <tr>
                 <td colSpan={4} className="text-center py-6 text-koperasi-400">
-                  No backups yet.
+                  {t('backups.empty')}
                 </td>
               </tr>
             )}
@@ -115,13 +117,15 @@ export default function BackupsPage() {
                 <td>{f.name}</td>
                 <td>{(f.size_bytes / 1024).toFixed(1)} KB</td>
                 <td>{new Date(f.created_at * 1000).toLocaleString('id-ID')}</td>
-                <td className="text-right space-x-3 whitespace-nowrap">
-                  <button className="text-koperasi-600 hover:underline text-sm" onClick={() => handleDownload(f.name)}>
-                    Download
-                  </button>
-                  <button className="text-red-600 hover:underline text-sm" onClick={() => restore(f.name)} disabled={busy}>
-                    Restore
-                  </button>
+                <td className="text-right whitespace-nowrap">
+                  <div className="flex justify-end gap-1.5">
+                    <button className="btn-action-edit" onClick={() => handleDownload(f.name)}>
+                      {t('backups.download')}
+                    </button>
+                    <button className="btn-action-danger" onClick={() => restore(f.name)} disabled={busy}>
+                      {t('backups.restore')}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

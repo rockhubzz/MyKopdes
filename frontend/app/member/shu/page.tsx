@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import StatCard from '@/components/StatCard';
 import { apiFetch } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface ShuResponse {
   shu_balance: string;
@@ -11,6 +12,7 @@ interface ShuResponse {
 
 export default function MemberShuPage() {
   const [shu, setShu] = useState<ShuResponse | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     apiFetch<ShuResponse>('/member/shu').then(setShu);
@@ -18,10 +20,10 @@ export default function MemberShuPage() {
 
   return (
     <div className="space-y-6 max-w-lg">
-      <h1 className="text-2xl font-bold text-koperasi-800">My SHU (Sisa Hasil Usaha)</h1>
+      <h1 className="text-2xl font-bold text-koperasi-800">{t('memberShu.title')}</h1>
 
       <StatCard
-        label="Current SHU Balance"
+        label={t('memberShu.balance')}
         value={shu ? `Rp ${Number(shu.shu_balance).toLocaleString('id-ID')}` : '...'}
         accent="harvest"
       />
@@ -29,9 +31,7 @@ export default function MemberShuPage() {
       <div className="card text-sm text-koperasi-600 space-y-2">
         <p>{shu?.accrual_note}</p>
         <p className="text-koperasi-400">
-          SHU (Sisa Hasil Usaha) is your share of the cooperative&apos;s surplus, accrued automatically as you shop
-          here. The rate is set by the cooperative&apos;s administrators and may be reviewed or distributed
-          periodically per your cooperative&apos;s bylaws.
+          {t('memberShu.explainer')}
         </p>
       </div>
     </div>

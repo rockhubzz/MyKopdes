@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
+import { PROFILE_UPDATED_EVENT } from '@/components/StaffProfileForm';
 import { apiFetch } from '@/lib/api';
 import { getRole, isStaffRole } from '@/lib/auth';
-import { STAFF_NAVS, STAFF_ROLE_LABELS } from '@/lib/staff-nav';
+import { STAFF_NAVS, STAFF_ROLE_LABEL_KEYS } from '@/lib/staff-nav';
+import { useLanguage, normalizeLocale } from '@/lib/i18n/LanguageContext';
 import type { StaffRole, StaffUser } from '@/lib/types';
 
 /**
@@ -36,25 +38,45 @@ export default function StaffShell({
     return isStaffRole(cookieRole) ? cookieRole : sectionRole;
   });
   const [userName, setUserName] = useState<string | undefined>(undefined);
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const { t, setLang } = useLanguage();
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchMe = useCallback(() => {
     apiFetch<StaffUser>('/auth/staff/me')
       .then((user) => {
-        if (cancelled) return;
         // Trust the server as the source of truth; a stale/tampered
         // cookie must never drive the displayed role.
         if (user?.role) setRole(user.role);
         setUserName(user?.name);
+        setAvatarPath(user?.avatar_path ?? null);
+        // Adopt the account's saved language (e.g. fresh login on a new device).
+        if (user?.locale) setLang(normalizeLocale(user.locale));
       })
       .catch(() => {
         // Keep the cookie-derived role; apiFetch already redirects to
         // /login on 401.
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [setLang]);
 
-  return <AppShell navItems={STAFF_NAVS[role]} roleLabel={STAFF_ROLE_LABELS[role]} userName={userName}>{children}</AppShell>;
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
+
+  // A profile save updates the header name/photo without a full reload.
+  useEffect(() => {
+    window.addEventListener(PROFILE_UPDATED_EVENT, fetchMe);
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, fetchMe);
+  }, [fetchMe]);
+
+  return (
+    <AppShell
+      navItems={STAFF_NAVS[role].map((e) => ({ href: e.href, icon: e.icon, label: t(e.labelKey) }))}
+      roleLabel={t(STAFF_ROLE_LABEL_KEYS[role])}
+      userName={userName}
+      avatarPath={avatarPath}
+      profileHref={role === 'admin' ? '/admin/profile' : role === 'shop_owner' ? '/owner/profile' : '/employee/profile'}
+    >
+      {children}
+    </AppShell>
+  );
 }

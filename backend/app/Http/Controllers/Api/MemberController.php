@@ -26,22 +26,25 @@ class MemberController extends Controller
     }
 
     /**
-     * Checkout-time lookup: by phone, membership ID, or a QR/barcode payload
-     * that simply encodes the membership ID. Used by Cashier Mode.
+     * Checkout-time lookup: exact match on phone/membership ID (or a
+     * QR/barcode payload encoding the membership ID), plus partial
+     * name search so cashiers can find members by name. Always returns
+     * a list of active members — the caller picks when several match.
+     * Used by Cashier Mode.
      */
     public function lookup(Request $request)
     {
         $data = $request->validate(['query' => ['required', 'string']]);
+        $query = trim($data['query']);
 
-        $member = Member::where('membership_id', $data['query'])
-            ->orWhere('phone', $data['query'])
-            ->first();
+        $members = Member::where('is_active', true)
+            ->where(fn ($q) => $q->where('membership_id', $query)
+                ->orWhere('phone', $query)
+                ->orWhere('name', 'like', "%{$query}%"))
+            ->limit(8)
+            ->get();
 
-        if (! $member || ! $member->is_active) {
-            return response()->json(['message' => 'No active member found.'], 404);
-        }
-
-        return response()->json($member);
+        return response()->json($members);
     }
 
     public function store(Request $request)

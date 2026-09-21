@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RestockController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\Staff\ProfileController as StaffProfileController;
 use App\Http\Controllers\Api\StaffAuthController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\TransactionController;
@@ -39,6 +40,11 @@ Route::get('/settings/public', [SettingsController::class, 'publicSettings']);
 Route::middleware('auth:staff')->group(function () {
     Route::post('/auth/staff/logout', [StaffAuthController::class, 'logout']);
     Route::get('/auth/staff/me', [StaffAuthController::class, 'me']);
+    // Own profile settings (all staff tiers). POST is honored alongside PUT
+    // because avatar uploads go out as multipart/form-data, same rationale
+    // as the items image workaround below.
+    Route::get('/auth/staff/profile', [StaffProfileController::class, 'show']);
+    Route::match(['put', 'post'], '/auth/staff/profile', [StaffProfileController::class, 'update']);
     Route::get('/dashboard/alerts', [DashboardController::class, 'alerts']);
 });
 
@@ -185,7 +191,8 @@ Route::middleware(['auth:member', 'log.activity'])->prefix('member')->group(func
     Route::post('/logout', [MemberAuthController::class, 'logout']);
     Route::get('/me', [MemberAuthController::class, 'me']);
     Route::get('/profile', [MemberProfileController::class, 'show']);
-    Route::put('/profile', [MemberProfileController::class, 'update']);
+    // POST alongside PUT: avatar uploads go out as multipart/form-data.
+    Route::match(['put', 'post'], '/profile', [MemberProfileController::class, 'update']);
     Route::get('/transactions', [TransactionHistoryController::class, 'index']);
     Route::get('/transactions/{id}', [TransactionHistoryController::class, 'show']);
     Route::get('/shu', [ShuController::class, 'show']);
