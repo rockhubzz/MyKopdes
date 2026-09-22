@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\LogActivity;
+use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -32,6 +33,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // additional, stricter throttle directly on the route (see
         // routes/api.php) as brute-force protection.
         $middleware->throttleApi();
+
+        // Negotiate en/id for localized API error messages (lang/*/api.php)
+        // from Accept-Language or the koperasi_lang cookie.
+        $middleware->api(append: [SetLocale::class]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(function ($request, Throwable $e) {

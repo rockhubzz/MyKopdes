@@ -178,14 +178,14 @@ export function UserDetails({ id }: { id: number }) {
     let cancelled = false;
     setUser(null);
     setError(null);
-    apiFetch<StaffUser>(`/users/${id}`)
-      .then((res) => {
+    Promise.all([
+      apiFetch<StaffUser>(`/users/${id}`),
+      apiFetch<Paginated<AuditLog>>(`/audit-logs?actor_id=${id}&per_page=10`).catch(() => null),
+    ])
+      .then(([userRes, logsRes]) => {
         if (cancelled) return;
-        setUser(res);
-        return apiFetch<Paginated<AuditLog>>(`/audit-logs?actor_id=${id}&per_page=10`);
-      })
-      .then((res) => {
-        if (!cancelled && res) setActivity(res.data);
+        setUser(userRes);
+        if (logsRes) setActivity(logsRes.data);
       })
       .catch((e) => {
         if (!cancelled) setError(e.message || t('details.failedUser'));

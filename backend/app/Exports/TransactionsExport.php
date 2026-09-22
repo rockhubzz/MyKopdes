@@ -2,23 +2,34 @@
 
 namespace App\Exports;
 
-use Illuminate\Support\Collection;
+use App\Models\Transaction;
+use Illuminate\Support\Carbon;
 use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 
-class TransactionsExport implements FromCollection, WithHeadings, WithMapping
+/**
+ * Query-backed export: maatwebsite/excel reads the rows in chunks straight
+ * from the DB cursor instead of requiring the caller to hydrate the whole
+ * range into memory first. Only the columns the sheet prints are selected.
+ */
+class TransactionsExport implements FromQuery, WithHeadings, WithMapping
 {
     use Exportable;
 
-    public function __construct(private readonly Collection $transactions)
-    {
+    public function __construct(
+        private readonly Carbon $from,
+        private readonly Carbon $to,
+    ) {
     }
 
-    public function collection(): Collection
+    public function query()
     {
-        return $this->transactions;
+        return Transaction::query()
+            ->with(['cashier:id,name', 'member:id,name'])
+            ->whereBetween('created_at', [$this->from, $this->to])
+            ->orderBy('created_at');
     }
 
     public function headings(): array

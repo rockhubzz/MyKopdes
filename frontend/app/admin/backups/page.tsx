@@ -94,7 +94,7 @@ export default function BackupsPage() {
               <th>{t('backups.colFile')}</th>
               <th>{t('backups.colSize')}</th>
               <th>{t('backups.colCreated')}</th>
-              <th className="text-right">{t('backups.colActions')}</th>
+                <th className="text-right w-px">{t('backups.colActions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -117,7 +117,7 @@ export default function BackupsPage() {
                 <td>{f.name}</td>
                 <td>{(f.size_bytes / 1024).toFixed(1)} KB</td>
                 <td>{new Date(f.created_at * 1000).toLocaleString('id-ID')}</td>
-                <td className="text-right whitespace-nowrap">
+                <td className="text-right whitespace-nowrap w-px">
                   <div className="flex justify-end gap-1.5">
                     <button className="btn-action-edit" onClick={() => handleDownload(f.name)}>
                       {t('backups.download')}

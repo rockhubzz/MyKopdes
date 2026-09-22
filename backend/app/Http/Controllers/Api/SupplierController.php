@@ -17,7 +17,7 @@ class SupplierController extends Controller
             $query->where(fn ($q) => $q->where('name', 'like', "%$search%")->orWhere('contact_person', 'like', "%$search%"));
         }
 
-        return $query->orderBy('name')->paginate($request->integer('per_page', 20));
+        return $query->orderBy('name')->paginate(min($request->integer('per_page', 20), 100));
     }
 
     public function store(Request $request)

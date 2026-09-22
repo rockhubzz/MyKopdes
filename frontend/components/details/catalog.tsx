@@ -36,14 +36,16 @@ export function ItemDetails({ id, navigate }: { id: number; navigate: (t: Detail
     let cancelled = false;
     setItem(null);
     setError(null);
-    apiFetch<Item>(`/items/${id}`)
-      .then((res) => {
+    // The two reads are independent (both keyed by id) — fire together so
+    // the modal finishes in one round trip instead of two sequential ones.
+    Promise.all([
+      apiFetch<Item>(`/items/${id}`),
+      apiFetch<Paginated<RestockingRecord>>(`/restocking-records?item_id=${id}&per_page=5`).catch(() => null),
+    ])
+      .then(([itemRes, restocksRes]) => {
         if (cancelled) return;
-        setItem(res);
-        return apiFetch<Paginated<RestockingRecord>>(`/restocking-records?item_id=${id}&per_page=5`);
-      })
-      .then((res) => {
-        if (!cancelled && res) setRestocks(res.data);
+        setItem(itemRes);
+        if (restocksRes) setRestocks(restocksRes.data);
       })
       .catch((e) => {
         if (!cancelled) setError(e.message || t('details.failedItem'));
@@ -142,16 +144,16 @@ export function CategoryDetails({ id, navigate }: { id: number; navigate: (t: De
     let cancelled = false;
     setCategory(null);
     setError(null);
-    apiFetch<ItemCategory & { items_count?: number }>(`/item-categories/${id}`)
-      .then((res) => {
+    Promise.all([
+      apiFetch<ItemCategory & { items_count?: number }>(`/item-categories/${id}`),
+      apiFetch<Paginated<Item>>(`/items?category_id=${id}&per_page=50`).catch(() => null),
+    ])
+      .then(([catRes, itemsRes]) => {
         if (cancelled) return;
-        setCategory(res);
-        return apiFetch<Paginated<Item>>(`/items?category_id=${id}&per_page=50`);
-      })
-      .then((res) => {
-        if (!cancelled && res) {
-          setItems(res.data);
-          setItemsTotal(res.total);
+        setCategory(catRes);
+        if (itemsRes) {
+          setItems(itemsRes.data);
+          setItemsTotal(itemsRes.total);
         }
       })
       .catch((e) => {

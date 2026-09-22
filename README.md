@@ -5,7 +5,7 @@ Cashier Mode POS, member enrollment & SHU profit-sharing, discounts, staff
 management, and financial reporting — with four role tiers (Admin, Shop
 Owner, Employee, Member) enforced at both the API and the frontend.
 
-**Stack:** MySQL · Laravel 11 (REST API, Sanctum token auth) · Next.js 14
+**Stack:** MySQL · Laravel 12 (REST API, Sanctum token auth) · Next.js 14
 (App Router, TypeScript, Tailwind) · Docker Compose · Nginx.
 
 ---
@@ -25,8 +25,7 @@ through the browser:
 - `next build` compiles all frontend routes clean.
 
 Still treat the security-sensitive spots with care (see [Known gaps &
-next steps](#known-gaps--next-steps)) — particularly the note about the
-Laravel 11 advisories and the planned upgrade to Laravel 12.
+next steps](#known-gaps--next-steps)).
 
 ---
 
@@ -71,11 +70,6 @@ Notes:
   build and the container entrypoint install from it, so redeploys resolve
   identical versions. Never commit `vendor/` or `.env` files — they're
   gitignored (see `.gitignore`).
-- The `composer install` flags include `--no-security-blocking` deliberately:
-  every Laravel 11.x release is currently flagged by upstream security
-  advisories, so a strict audit would refuse to install at all. The proper
-  fix is upgrading to Laravel 12 (see below), not removing the flag and
-  hoping.
 - Opening the app from another machine on the LAN? The frontend calls the
   API same-origin (`NEXT_PUBLIC_API_BASE_URL=/api` through Nginx), so
   `http://<server-ip>` just works — no per-client URL to configure.
@@ -193,11 +187,10 @@ host.
 Being direct about what's a solid foundation vs. what still needs work
 before this is genuinely production-ready:
 
-- **Laravel 11 is past its security-fix window.** All 11.x releases trip
-  upstream advisories, which is why the Docker build passes
-  `--no-security-blocking` to Composer. Plan the upgrade to
-  `laravel/framework ^12.0` (plus a test pass over checkout/discounts/SHU)
-  before treating any deployment as long-lived.
+- **Laravel 12 is current and `composer audit` is clean.** The old
+  `--no-security-blocking` install flag (needed while on Laravel 11) has been
+  removed from the backend Dockerfile — a blocked audit will now fail the
+  build loudly instead of being bypassed.
 - **Camera-based barcode scanning isn't wired up.** Cashier Mode's scan
   field works great with a USB/Bluetooth barcode scanner (they emulate a
   keyboard), but there's no camera/webcam scanning library integrated yet —

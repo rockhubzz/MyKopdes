@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Wheat } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { dashboardPathFor, setSession } from '@/lib/auth';
+import { setCachedMember, setCachedStaffUser } from '@/lib/session-cache';
 import { useLanguage, normalizeLocale } from '@/lib/i18n/LanguageContext';
 import LanguageToggle from '@/components/LanguageToggle';
 import type { Member, Role, StaffUser } from '@/lib/types';
@@ -30,6 +31,9 @@ export default function LoginPage() {
         });
         const role: Role = res.user.role;
         setSession(res.token, role);
+        // Seed the shell's header cache so the dashboard lands with the
+        // name/avatar already painted (revalidated in the background).
+        setCachedStaffUser(res.user);
         // Adopt the account's saved language (falls back to English).
         setLang(normalizeLocale(res.user.locale));
         router.push(dashboardPathFor(role));
@@ -39,6 +43,7 @@ export default function LoginPage() {
           body: { identifier, password },
         });
         setSession(res.token, 'member');
+        setCachedMember(res.member);
         setLang(normalizeLocale(res.member.locale));
         router.push(dashboardPathFor('member'));
       }

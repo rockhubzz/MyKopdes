@@ -18,14 +18,16 @@ class AuditLogController extends Controller
         if ($request->filled('actor_id')) {
             $query->where('actor_id', $request->integer('actor_id'));
         }
+        // Range predicates keep the created_at index usable; whereDate()
+        // wraps the column in DATE() and forces a full scan.
         if ($request->filled('from')) {
-            $query->whereDate('created_at', '>=', $request->date('from'));
+            $query->where('created_at', '>=', $request->date('from')->startOfDay());
         }
         if ($request->filled('to')) {
-            $query->whereDate('created_at', '<=', $request->date('to'));
+            $query->where('created_at', '<=', $request->date('to')->endOfDay());
         }
 
-        return $query->paginate($request->integer('per_page', 50));
+        return $query->paginate(min($request->integer('per_page', 50), 100));
     }
 
     public function show(AuditLog $auditLog)

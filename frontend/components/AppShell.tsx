@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogOut, User, Wheat } from 'lucide-react';
-import { apiFetch, storageUrl } from '@/lib/api';
+import { apiFetch, apiPrefetch, invalidateApiCache, storageUrl } from '@/lib/api';
 import { APP_NAME, APP_VERSION } from '@/lib/app-info';
 import { clearSession, getRole } from '@/lib/auth';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -14,6 +14,8 @@ export interface NavItem {
   href: string;
   label: string;
   icon?: React.ReactNode;
+  /** GET endpoints the destination fetches — warmed on hover/focus. */
+  prefetchApi?: string[];
 }
 
 const THEMES = {
@@ -98,8 +100,28 @@ export default function AppShell({
       // Token may already be invalid/expired — fine, we're clearing it locally regardless.
     }
     clearSession();
+    // apiFetch invalidation happens automatically on the POST above, but a
+    // failed/expired logout still needs caches dropped so the next account
+    // never sees the previous one's data or header.
+    invalidateApiCache();
+    const { clearSessionCaches } = await import('@/lib/session-cache');
+    clearSessionCaches();
     router.push('/login');
   }, [router]);
+
+  // Hovering/focusing a nav link warms both the route's JS bundle (Next
+  // prefetch) and its data (apiFetch cache), so the click lands instantly.
+  const prefetchNav = useCallback(
+    (item: NavItem) => {
+      try {
+        router.prefetch(item.href);
+      } catch {
+        // Prefetch is best-effort — navigation still works without it.
+      }
+      item.prefetchApi?.forEach((endpoint) => apiPrefetch(endpoint));
+    },
+    [router]
+  );
 
   const initial = (userName?.trim().charAt(0) ?? roleLabel.charAt(0)).toUpperCase();
 
@@ -152,6 +174,9 @@ export default function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch
+                onMouseEnter={() => prefetchNav(item)}
+                onFocus={() => prefetchNav(item)}
                 aria-current={active ? 'page' : undefined}
                 className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   active ? theme.linkActive : theme.link

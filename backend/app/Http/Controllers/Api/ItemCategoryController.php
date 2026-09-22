@@ -17,7 +17,7 @@ class ItemCategoryController extends Controller
             $query->where('name', 'like', '%'.$request->string('search').'%');
         }
 
-        return $query->orderBy('name')->paginate($request->integer('per_page', 50));
+        return $query->orderBy('name')->paginate(min($request->integer('per_page', 50), 100));
     }
 
     public function store(Request $request)

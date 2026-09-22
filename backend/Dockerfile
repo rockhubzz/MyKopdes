@@ -13,7 +13,7 @@ WORKDIR /var/www/html
 # ---- development target ---------------------------------------------------
 FROM base AS development
 COPY . /var/www/html
-RUN composer install --no-interaction --no-progress --no-security-blocking
+RUN composer install --no-interaction --no-progress
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -23,7 +23,7 @@ CMD ["php-fpm"]
 # ---- production target -----------------------------------------------------
 FROM base AS production
 COPY . /var/www/html
-RUN composer install --no-interaction --no-progress --no-security-blocking --optimize-autoloader --no-dev
+RUN composer install --no-interaction --no-progress --optimize-autoloader --no-dev
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 RUN php artisan config:cache || true
 # The public/storage symlink is gitignored, so link it at startup (not build

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Discount;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -20,7 +21,7 @@ class DiscountController extends Controller
             $query->active();
         }
 
-        return $query->latest()->paginate($request->integer('per_page', 20));
+        return $query->latest()->paginate(min($request->integer('per_page', 20), 100));
     }
 
     /**
@@ -58,8 +59,20 @@ class DiscountController extends Controller
         return response()->json($discount);
     }
 
-    public function destroy(Discount $discount)
+    public function destroy(Request $request, Discount $discount)
     {
+        // Permanent deletion would null out discount_id on past transactions
+        // and lose which promo was applied, so it is only allowed for
+        // discounts never used in a sale.
+        if ($request->boolean('force')) {
+            if (Transaction::where('discount_id', $discount->id)->exists()) {
+                abort(422, 'Cannot permanently delete a discount used in past transactions. Deactivate it instead.');
+            }
+            $discount->delete();
+
+            return response()->json(['message' => 'Discount permanently deleted.']);
+        }
+
         $discount->update(['is_active' => false]);
 
         return response()->json(['message' => 'Discount deactivated.']);

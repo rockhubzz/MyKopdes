@@ -9,11 +9,13 @@ class TransactionHistoryController extends Controller
 {
     public function index(Request $request)
     {
+        // The history table prints item names per row, so lines are needed —
+        // but only the FKs + the nested name, not full item rows.
         return $request->user('member')
             ->transactions()
-            ->with('items.item')
+            ->with(['items:id,transaction_id,item_id,quantity', 'items.item:id,name'])
             ->latest()
-            ->paginate($request->integer('per_page', 20));
+            ->paginate(min($request->integer('per_page', 20), 100));
     }
 
     public function show(Request $request, int $id)

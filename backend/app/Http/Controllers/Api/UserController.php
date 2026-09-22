@@ -22,7 +22,7 @@ class UserController extends Controller
             $query->where(fn ($q) => $q->where('name', 'like', "%$search%")->orWhere('email', 'like', "%$search%"));
         }
 
-        return $query->orderBy('name')->paginate($request->integer('per_page', 20));
+        return $query->orderBy('name')->paginate(min($request->integer('per_page', 20), 100));
     }
 
     public function store(Request $request)
@@ -71,10 +71,22 @@ class UserController extends Controller
         return response()->json($user);
     }
 
-    public function destroy(User $user)
+    public function destroy(Request $request, User $user)
     {
         if ($user->id === request()->user('staff')->id) {
-            abort(422, 'You cannot deactivate your own account.');
+            abort(422, __('api.users.self_deactivate'));
+        }
+
+        // Permanent deletion is only safe when the account left no trail in
+        // the audit history; otherwise the row must stay (deactivated) so
+        // past transactions/restocks keep their attribution.
+        if ($request->boolean('force')) {
+            if ($user->transactions()->exists() || $user->restockingRecords()->exists()) {
+                abort(422, __('api.users.force_blocked'));
+            }
+            $user->delete();
+
+            return response()->json(['message' => 'User permanently deleted.']);
         }
 
         // Soft-disable rather than hard delete: transactions/restocks

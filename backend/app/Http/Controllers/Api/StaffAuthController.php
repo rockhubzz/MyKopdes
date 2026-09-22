@@ -22,13 +22,13 @@ class StaffAuthController extends Controller
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['These credentials do not match our records.'],
+                'email' => [__('api.auth.credentials')],
             ]);
         }
 
         if (! $user->is_active) {
             throw ValidationException::withMessages([
-                'email' => ['This account has been deactivated. Contact an administrator.'],
+                'email' => [__('api.auth.staff_inactive')],
             ]);
         }
 

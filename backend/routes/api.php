@@ -100,6 +100,7 @@ Route::middleware(['auth:staff', 'role:shop_owner', 'log.activity'])->group(func
     // enabled for API requests.
     Route::match(['put', 'post'], '/items/{item}', [ItemController::class, 'update']);
     Route::delete('/items/{item}', [ItemController::class, 'destroy']);
+    Route::post('/items/{item}/activate', [ItemController::class, 'activate']);
     Route::apiResource('item-categories', ItemCategoryController::class)->except(['index']);
 
     // Suppliers — full CRUD.
@@ -135,7 +136,7 @@ Route::middleware(['auth:staff', 'role:shop_owner', 'log.activity'])->group(func
     });
     Route::delete('/employees/{user}', function (\Illuminate\Http\Request $request, \App\Models\User $user) {
         abort_unless($user->role === \App\Models\User::ROLE_EMPLOYEE, 404);
-        return app(UserController::class)->destroy($user);
+        return app(UserController::class)->destroy($request, $user);
     });
 
     // Member enrollment & records.

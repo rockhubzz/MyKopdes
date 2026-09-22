@@ -27,15 +27,15 @@ class EnsureRole
         // instanceof check a Member model would blow up on hasAtLeast()
         // instead of getting a clean 403.
         if (! $user instanceof User || ! in_array($minimumRole, User::ROLES, true)) {
-            abort(403, 'You do not have permission to access this resource.');
+            abort(403, __('api.role.forbidden'));
         }
 
         if (! $user->is_active) {
-            abort(403, 'Your account has been deactivated. Contact an administrator.');
+            abort(403, __('api.role.deactivated'));
         }
 
         if (! $user->hasAtLeast($minimumRole)) {
-            abort(403, 'You do not have permission to access this resource.');
+            abort(403, __('api.role.forbidden'));
         }
 
         return $next($request);

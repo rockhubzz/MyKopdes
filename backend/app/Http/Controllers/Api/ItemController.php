@@ -30,7 +30,7 @@ class ItemController extends Controller
             $query->where('is_active', true);
         }
 
-        return $query->orderBy('name')->paginate($request->integer('per_page', 20));
+        return $query->orderBy('name')->paginate(min($request->integer('per_page', 20), 100));
     }
 
     /** Exact barcode/SKU match used by the Cashier Mode scanner input. */
@@ -38,9 +38,13 @@ class ItemController extends Controller
     {
         $data = $request->validate(['code' => ['required', 'string']]);
 
-        $item = Item::where('barcode', $data['code'])->orWhere('sku', $data['code'])->first();
+        // Both columns are unique-indexed; filter is_active in SQL so misses
+        // short-circuit without hydrating a row we then reject in PHP.
+        $item = Item::where('is_active', true)
+            ->where(fn ($q) => $q->where('barcode', $data['code'])->orWhere('sku', $data['code']))
+            ->first();
 
-        if (! $item || ! $item->is_active) {
+        if (! $item) {
             return response()->json(['message' => 'Item not found.'], 404);
         }
 
@@ -76,13 +80,39 @@ class ItemController extends Controller
         return response()->json($item->load('category'));
     }
 
-    public function destroy(Item $item)
+    public function destroy(Request $request, Item $item)
     {
+        // Permanent deletion is only safe when nothing references the row;
+        // otherwise it would wipe sales/restock history (restocking_records
+        // even cascade). Callers that just want it off the shelf use the
+        // plain DELETE, which deactivates.
+        if ($request->boolean('force')) {
+            if ($item->transactionItems()->exists() || $item->restockingRecords()->exists()) {
+                abort(422, 'Cannot permanently delete an item with sales or restock history. Deactivate it instead.');
+            }
+            $item->delete();
+
+            return response()->json(['message' => 'Item permanently deleted.']);
+        }
+
         // Preserve history: transaction_items / restocking_records reference
         // this row, so deactivate instead of hard-deleting.
         $item->update(['is_active' => false]);
 
         return response()->json(['message' => 'Item deactivated.']);
+    }
+
+    /**
+     * Reactivate a deactivated item. Separate from update() because the
+     * update validator requires the full sellable payload (name, sku,
+     * prices…), while reactivation is just the status flip the Items table's
+     * Activate button needs.
+     */
+    public function activate(Item $item)
+    {
+        $item->update(['is_active' => true]);
+
+        return response()->json($item->load('category'));
     }
 
     private function validated(Request $request, ?int $ignoreId = null): array

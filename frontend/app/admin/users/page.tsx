@@ -57,6 +57,22 @@ export default function UsersPage() {
     setReloadKey((k) => k + 1);
   }
 
+  async function handleActivate(u: StaffUser) {
+    if (!confirm(t('users.activateConfirm', { name: u.name }))) return;
+    await apiFetch(`/users/${u.id}`, { method: 'PUT', body: { is_active: true } });
+    setReloadKey((k) => k + 1);
+  }
+
+  async function handleDelete(u: StaffUser) {
+    if (!confirm(t('users.deleteConfirm', { name: u.name }))) return;
+    try {
+      await apiFetch(`/users/${u.id}?force=1`, { method: 'DELETE' });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : t('users.deleteFailed'));
+    }
+  }
+
   const columns: Column<StaffUser>[] = [
     { header: t('users.colName'), render: (u) => u.name },
     { header: t('users.colEmail'), render: (u) => u.email },
@@ -97,8 +113,17 @@ export default function UsersPage() {
             <button className="btn-action-edit" onClick={() => openEdit(u)}>
               {t('users.edit')}
             </button>
-            <button className="btn-action-danger" onClick={() => handleDeactivate(u)}>
-              {t('users.deactivate')}
+            {u.is_active ? (
+              <button className="btn-action-danger" onClick={() => handleDeactivate(u)}>
+                {t('users.deactivate')}
+              </button>
+            ) : (
+              <button className="btn-action-edit" onClick={() => handleActivate(u)}>
+                {t('users.activate')}
+              </button>
+            )}
+            <button className="btn-action-danger" onClick={() => handleDelete(u)}>
+              {t('users.delete')}
             </button>
           </div>
         )}

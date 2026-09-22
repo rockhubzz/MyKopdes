@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiPrefetch } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Paginated } from '@/lib/types';
@@ -58,14 +58,27 @@ function DataTableInner<T extends { id: number }>({
 
   useEffect(() => {
     const controller = new AbortController();
+    // Serving a fresh cache hit still sets loading briefly for the thin
+    // progress bar — but keep it synchronous-fast: apiFetch resolves cached
+    // rows without a network round trip.
     setLoading(true);
     setError(null);
 
     const params = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
     if (debouncedSearch) params.set('search', debouncedSearch);
+    const url = `${endpoint}?${params.toString()}${extraParams}`;
 
-    apiFetch<Paginated<T>>(`${endpoint}?${params.toString()}${extraParams}`, { signal: controller.signal })
-      .then((res) => setData(res))
+    apiFetch<Paginated<T>>(url, { signal: controller.signal })
+      .then((res) => {
+        setData(res);
+        // Paging forward is the most common next action — warm page+1 while
+        // idle so "Next" resolves from cache.
+        if (res.current_page < res.last_page) {
+          const next = new URLSearchParams(params);
+          next.set('page', String(res.current_page + 1));
+          apiPrefetch(`${endpoint}?${next.toString()}${extraParams}`);
+        }
+      })
       .catch((e) => {
         // Aborted superseded request — not an error worth showing.
         if (controller.signal.aborted) return;
@@ -113,7 +126,7 @@ function DataTableInner<T extends { id: number }>({
                 </th>
               ))}
               {actions && (
-                <th scope="col" className="text-right">
+                <th scope="col" className="text-right w-px">
                   {t('table.actions')}
                 </th>
               )}
@@ -167,7 +180,7 @@ function DataTableInner<T extends { id: number }>({
                   ))}
                   {actions && (
                     <td
-                      className="text-right whitespace-nowrap"
+                      className="text-right whitespace-nowrap w-px"
                       // Action buttons (edit/void/…) must not open the detail view.
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}

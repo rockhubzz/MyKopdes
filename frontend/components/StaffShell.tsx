@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import { PROFILE_UPDATED_EVENT } from '@/components/StaffProfileForm';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiPrefetch } from '@/lib/api';
 import { getRole, isStaffRole } from '@/lib/auth';
+import { getCachedStaffUser, setCachedStaffUser } from '@/lib/session-cache';
 import { STAFF_NAVS, STAFF_ROLE_LABEL_KEYS } from '@/lib/staff-nav';
 import { useLanguage, normalizeLocale } from '@/lib/i18n/LanguageContext';
 import type { StaffRole, StaffUser } from '@/lib/types';
@@ -33,12 +34,16 @@ export default function StaffShell({
 }) {
   // Initialise synchronously from the cookie so the first paint already
   // shows the right role — no flash of the section's fallback shell.
+  // The last verified user (if any) additionally fills the header name and
+  // avatar instantly; fetchMe() below revalidates in the background.
   const [role, setRole] = useState<StaffRole>(() => {
+    const cached = getCachedStaffUser();
+    if (cached) return cached.role;
     const cookieRole = getRole();
     return isStaffRole(cookieRole) ? cookieRole : sectionRole;
   });
-  const [userName, setUserName] = useState<string | undefined>(undefined);
-  const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | undefined>(() => getCachedStaffUser()?.name);
+  const [avatarPath, setAvatarPath] = useState<string | null>(() => getCachedStaffUser()?.avatar_path ?? null);
   const { t, setLang } = useLanguage();
 
   const fetchMe = useCallback(() => {
@@ -46,6 +51,7 @@ export default function StaffShell({
       .then((user) => {
         // Trust the server as the source of truth; a stale/tampered
         // cookie must never drive the displayed role.
+        setCachedStaffUser(user);
         if (user?.role) setRole(user.role);
         setUserName(user?.name);
         setAvatarPath(user?.avatar_path ?? null);
@@ -59,7 +65,14 @@ export default function StaffShell({
   }, [setLang]);
 
   useEffect(() => {
+    // Revalidate in the background even when serving the cached header —
+    // a role change or rename appears within a navigation or two.
     fetchMe();
+    // Warm the most likely next destination (the section dashboard) so its
+    // first open resolves from cache.
+    apiPrefetch('/dashboard/owner-summary');
+    apiPrefetch('/dashboard/alerts');
+    apiPrefetch('/dashboard/employee-summary');
   }, [fetchMe]);
 
   // A profile save updates the header name/photo without a full reload.
@@ -70,7 +83,7 @@ export default function StaffShell({
 
   return (
     <AppShell
-      navItems={STAFF_NAVS[role].map((e) => ({ href: e.href, icon: e.icon, label: t(e.labelKey) }))}
+      navItems={STAFF_NAVS[role].map((e) => ({ href: e.href, icon: e.icon, label: t(e.labelKey), prefetchApi: e.prefetchApi }))}
       roleLabel={t(STAFF_ROLE_LABEL_KEYS[role])}
       userName={userName}
       avatarPath={avatarPath}

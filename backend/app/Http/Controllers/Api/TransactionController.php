@@ -27,7 +27,12 @@ class TransactionController extends Controller
 
     public function index(Request $request)
     {
-        $query = Transaction::with(['member', 'cashier', 'discount', 'items.item']);
+        // List rows render code/date/cashier/member/total/payment/status only
+        // (lines load on demand in the detail modal). Eager-loading items.item
+        // here used to multiply every page into hundreds of rows — load just
+        // the names the table prints, plus a lines count.
+        $query = Transaction::with(['member:id,name', 'cashier:id,name', 'discount:id,name'])
+            ->withCount('items');
 
         // Employees see only their own shift's transactions unless they
         // pass their own cashier_id explicitly; Shop Owner/Admin can see
@@ -37,10 +42,10 @@ class TransactionController extends Controller
         }
 
         if ($request->filled('from')) {
-            $query->whereDate('created_at', '>=', $request->date('from'));
+            $query->where('created_at', '>=', $request->date('from')->startOfDay());
         }
         if ($request->filled('to')) {
-            $query->whereDate('created_at', '<=', $request->date('to'));
+            $query->where('created_at', '<=', $request->date('to')->endOfDay());
         }
         if ($request->filled('payment_method')) {
             $query->where('payment_method', $request->string('payment_method'));
@@ -49,7 +54,7 @@ class TransactionController extends Controller
             $query->where('member_id', $request->integer('member_id'));
         }
 
-        return $query->latest()->paginate($request->integer('per_page', 20));
+        return $query->latest()->paginate(min($request->integer('per_page', 20), 200));
     }
 
     public function show(Transaction $transaction)

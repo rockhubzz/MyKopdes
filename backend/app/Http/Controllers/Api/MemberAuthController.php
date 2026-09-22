@@ -27,13 +27,13 @@ class MemberAuthController extends Controller
 
         if (! $member || ! Hash::check($data['password'], $member->password)) {
             throw ValidationException::withMessages([
-                'identifier' => ['These credentials do not match our records.'],
+                'identifier' => [__('api.auth.credentials')],
             ]);
         }
 
         if (! $member->is_active) {
             throw ValidationException::withMessages([
-                'identifier' => ['This membership is inactive. Contact the cooperative office.'],
+                'identifier' => [__('api.auth.member_inactive')],
             ]);
         }
 

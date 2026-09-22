@@ -22,7 +22,7 @@ class MemberController extends Controller
                 ->orWhere('phone', 'like', "%$search%"));
         }
 
-        return $query->orderBy('name')->paginate($request->integer('per_page', 20));
+        return $query->orderBy('name')->paginate(min($request->integer('per_page', 20), 100));
     }
 
     /**
@@ -41,6 +41,7 @@ class MemberController extends Controller
             ->where(fn ($q) => $q->where('membership_id', $query)
                 ->orWhere('phone', $query)
                 ->orWhere('name', 'like', "%{$query}%"))
+            ->select(['id', 'membership_id', 'name', 'phone'])
             ->limit(8)
             ->get();
 
@@ -94,8 +95,20 @@ class MemberController extends Controller
         return response()->json($member);
     }
 
-    public function destroy(Member $member)
+    public function destroy(Request $request, Member $member)
     {
+        // Permanent deletion would orphan purchase history (transactions keep
+        // the row via nullOnDelete but lose who bought what), so it is only
+        // allowed for members who never purchased.
+        if ($request->boolean('force')) {
+            if ($member->transactions()->exists()) {
+                abort(422, __('api.members.force_blocked'));
+            }
+            $member->delete();
+
+            return response()->json(['message' => 'Member permanently deleted.']);
+        }
+
         $member->update(['is_active' => false]);
 
         return response()->json(['message' => 'Membership deactivated.']);

@@ -71,6 +71,22 @@ export default function DiscountsPage() {
     setReloadKey((k) => k + 1);
   }
 
+  async function handleActivate(d: Discount) {
+    if (!confirm(t('discounts.activateConfirm', { name: d.name }))) return;
+    await apiFetch(`/discounts/${d.id}`, { method: 'PUT', body: { is_active: true } });
+    setReloadKey((k) => k + 1);
+  }
+
+  async function handleDelete(d: Discount) {
+    if (!confirm(t('discounts.deleteConfirm', { name: d.name }))) return;
+    try {
+      await apiFetch(`/discounts/${d.id}?force=1`, { method: 'DELETE' });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : t('discounts.deleteFailed'));
+    }
+  }
+
   const columns: Column<Discount>[] = [
     { header: t('discounts.colName'), render: (d) => d.name },
     { header: t('discounts.colType'), render: (d) => <span className="capitalize">{tx(`dtype.${d.type}`, d.type.replace(/_/g, ' '))}</span> },
@@ -114,8 +130,17 @@ export default function DiscountsPage() {
             <button className="btn-action-edit" onClick={() => openEdit(d)}>
               {t('discounts.edit')}
             </button>
-            <button className="btn-action-danger" onClick={() => handleDeactivate(d)}>
-              {t('discounts.deactivate')}
+            {d.is_active ? (
+              <button className="btn-action-danger" onClick={() => handleDeactivate(d)}>
+                {t('discounts.deactivate')}
+              </button>
+            ) : (
+              <button className="btn-action-edit" onClick={() => handleActivate(d)}>
+                {t('discounts.activate')}
+              </button>
+            )}
+            <button className="btn-action-danger" onClick={() => handleDelete(d)}>
+              {t('discounts.delete')}
             </button>
           </div>
         )}

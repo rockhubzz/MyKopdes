@@ -12,7 +12,9 @@ class RestockController extends Controller
 {
     public function index(Request $request)
     {
-        $query = RestockingRecord::with(['item', 'supplier', 'submittedBy']);
+        // List rows print item + supplier names only (submitter shows in the
+        // detail modal) — skip the submittedBy join per row.
+        $query = RestockingRecord::with(['item:id,name', 'supplier:id,name']);
 
         if ($request->filled('item_id')) {
             $query->where('item_id', $request->integer('item_id'));
@@ -24,7 +26,7 @@ class RestockController extends Controller
             $query->where('submitted_by', $request->user('staff')->id);
         }
 
-        return $query->latest('restocked_at')->paginate($request->integer('per_page', 20));
+        return $query->latest('restocked_at')->paginate(min($request->integer('per_page', 20), 100));
     }
 
     /**

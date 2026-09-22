@@ -22,6 +22,7 @@ export default function ItemsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -75,6 +76,22 @@ export default function ItemsPage() {
     setReloadKey((k) => k + 1);
   }
 
+  async function handleActivate(item: Item) {
+    if (!confirm(t('items.activateConfirm', { name: item.name }))) return;
+    await apiFetch(`/items/${item.id}/activate`, { method: 'POST' });
+    setReloadKey((k) => k + 1);
+  }
+
+  async function handleDelete(item: Item) {
+    if (!confirm(t('items.deleteConfirm', { name: item.name }))) return;
+    try {
+      await apiFetch(`/items/${item.id}?force=1`, { method: 'DELETE' });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : t('items.deleteFailed'));
+    }
+  }
+
   const columns: Column<Item>[] = [
     {
       header: t('items.colItem'),
@@ -120,6 +137,10 @@ export default function ItemsPage() {
             <input type="checkbox" checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} />
             {t('items.lowStockOnly')}
           </label>
+          <label className="text-sm flex items-center gap-1">
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            {t('items.showInactive')}
+          </label>
           <button className="btn-primary" onClick={openCreate}>
             {t('items.addItem')}
           </button>
@@ -132,14 +153,23 @@ export default function ItemsPage() {
         columns={columns}
         onRowClick={(i) => setDetail({ entity: 'item', id: i.id })}
         reloadKey={reloadKey}
-        extraParams={lowStockOnly ? '&low_stock=1' : ''}
+        extraParams={`${lowStockOnly ? '&low_stock=1' : ''}${showInactive ? '&include_inactive=1' : ''}`}
         actions={(i) => (
           <div className="flex justify-end gap-1.5">
             <button className="btn-action-edit" onClick={() => openEdit(i)}>
               {t('items.edit')}
             </button>
-            <button className="btn-action-danger" onClick={() => handleDeactivate(i)}>
-              {t('items.deactivate')}
+            {i.is_active ? (
+              <button className="btn-action-danger" onClick={() => handleDeactivate(i)}>
+                {t('items.deactivate')}
+              </button>
+            ) : (
+              <button className="btn-action-edit" onClick={() => handleActivate(i)}>
+                {t('items.activate')}
+              </button>
+            )}
+            <button className="btn-action-danger" onClick={() => handleDelete(i)}>
+              {t('items.delete')}
             </button>
           </div>
         )}

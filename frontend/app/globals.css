@@ -85,6 +85,12 @@ table.data-table {
 table.data-table thead th {
   @apply text-left text-xs uppercase tracking-wide text-koperasi-500 border-b border-koperasi-100 py-2 px-3 bg-white;
 }
+/* Must beat the rule above (0,1,3): a lone .text-right utility (0,1,0)
+   loses to it, which left the Actions header left-aligned while its
+   right-aligned buttons sat offset underneath. */
+table.data-table thead th.text-right {
+  text-align: right;
+}
 table.data-table tbody td {
   @apply border-b border-koperasi-50 py-2 px-3;
 }
