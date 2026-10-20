@@ -131,6 +131,8 @@ public class KoperasiDbContext : DbContext
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+            // items_count is computed in the service layer, not a column.
+            entity.Ignore(e => e.ItemsCount);
         });
 
         // Supplier -> suppliers table

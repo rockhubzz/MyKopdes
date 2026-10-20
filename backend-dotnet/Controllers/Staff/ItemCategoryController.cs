@@ -79,8 +79,15 @@ public class ItemCategoryController : ControllerBase
     [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
     public async Task<IActionResult> Delete(int id)
     {
-        var success = await _categoryService.DeleteAsync(id);
-        if (!success) return NotFound(new { message = "Category not found" });
-        return Ok(new { message = "Category deleted successfully" });
+        try
+        {
+            var success = await _categoryService.DeleteAsync(id);
+            if (!success) return NotFound(new { message = "Category not found" });
+            return Ok(new { message = "Category deleted successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
     }
 }
