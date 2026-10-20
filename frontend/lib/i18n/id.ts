@@ -429,6 +429,7 @@ export const id: Dictionary = {
   employees: {
     title: 'Karyawan',
     addEmployee: '+ Tambah Karyawan',
+    showInactive: 'Tampilkan nonaktif',
     colName: 'Nama',
     colEmail: 'Email',
     colShift: 'Shift',
@@ -456,6 +457,7 @@ export const id: Dictionary = {
   members: {
     title: 'Anggota',
     enrollMember: '+ Daftarkan Anggota',
+    showInactive: 'Tampilkan nonaktif',
     colId: 'ID Anggota',
     colName: 'Nama',
     colPhone: 'Telepon',
@@ -520,6 +522,7 @@ export const id: Dictionary = {
   discounts: {
     title: 'Diskon & Promosi',
     newDiscount: '+ Diskon Baru',
+    showInactive: 'Tampilkan nonaktif',
     colName: 'Nama',
     colType: 'Tipe',
     colValue: 'Nilai',
@@ -559,6 +562,7 @@ export const id: Dictionary = {
   users: {
     title: 'Akun Staf',
     addStaff: '+ Tambah Staf',
+    showInactive: 'Tampilkan nonaktif',
     colName: 'Nama',
     colEmail: 'Email',
     colRole: 'Peran',

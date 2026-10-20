@@ -427,6 +427,7 @@ export const en = {
   employees: {
     title: 'Employees',
     addEmployee: '+ Add Employee',
+    showInactive: 'Show inactive',
     colName: 'Name',
     colEmail: 'Email',
     colShift: 'Shift',
@@ -454,6 +455,7 @@ export const en = {
   members: {
     title: 'Members',
     enrollMember: '+ Enroll Member',
+    showInactive: 'Show inactive',
     colId: 'Membership ID',
     colName: 'Name',
     colPhone: 'Phone',
@@ -518,6 +520,7 @@ export const en = {
   discounts: {
     title: 'Discounts & Promotions',
     newDiscount: '+ New Discount',
+    showInactive: 'Show inactive',
     colName: 'Name',
     colType: 'Type',
     colValue: 'Value',
@@ -557,6 +560,7 @@ export const en = {
   users: {
     title: 'Staff Accounts',
     addStaff: '+ Add Staff',
+    showInactive: 'Show inactive',
     colName: 'Name',
     colEmail: 'Email',
     colRole: 'Role',
