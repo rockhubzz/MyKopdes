@@ -14,9 +14,17 @@ public class LoanService : ILoanService
         _context = context;
     }
 
+    // Laravel-parity accessor: remaining = outstanding - paid. The column is
+    // EF-ignored, so it must be derived whenever loans leave the service.
+    private static void FillRemaining(IEnumerable<Loan> loans)
+    {
+        foreach (var l in loans)
+            l.RemainingAmount = (l.TotalAmount ?? 0) - (l.PaidAmount ?? 0);
+    }
+
     public async Task<List<Loan>> GetAllAsync(int page = 1, int pageSize = 15)
     {
-        return await _context.Loans
+        var loans = await _context.Loans
             .Include(l => l.Member)
             .Include(l => l.LoanProduct)
             .Include(l => l.User)
@@ -25,37 +33,45 @@ public class LoanService : ILoanService
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+        FillRemaining(loans);
+        return loans;
     }
 
     public async Task<Loan?> GetByIdAsync(int id)
     {
-        return await _context.Loans
+        var loan = await _context.Loans
             .Include(l => l.Member)
             .Include(l => l.LoanProduct)
             .Include(l => l.User)
             .Include(l => l.Payments)
             .FirstOrDefaultAsync(l => l.Id == id);
+        if (loan != null) FillRemaining(new[] { loan });
+        return loan;
     }
 
     public async Task<List<Loan>> GetByMemberAsync(int memberId)
     {
-        return await _context.Loans
+        var loans = await _context.Loans
             .Include(l => l.LoanProduct)
             .Include(l => l.Payments)
             .Where(l => l.MemberId == memberId)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
+        FillRemaining(loans);
+        return loans;
     }
 
     public async Task<List<Loan>> GetByStatusAsync(string status)
     {
-        return await _context.Loans
+        var loans = await _context.Loans
             .Include(l => l.Member)
             .Include(l => l.LoanProduct)
             .Include(l => l.Payments)
             .Where(l => l.Status == status)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
+        FillRemaining(loans);
+        return loans;
     }
 
     public async Task<string> GenerateLoanCodeAsync()
@@ -79,6 +95,7 @@ public class LoanService : ILoanService
             loan.LoanCode = await GenerateLoanCodeAsync();
 
         // Calculate interest and payments if not set
+        loan.InterestRate = loan.InterestRate ?? 0; // column is NOT NULL; EF sends explicit NULL otherwise
         loan.InterestAmount = await CalculateInterestAsync(loan.PrincipalAmount ?? 0, loan.TermInMonths, loan.InterestRate ?? 0);
 
         loan.TotalAmount = (loan.PrincipalAmount ?? 0) + (loan.InterestAmount ?? 0);
@@ -180,7 +197,9 @@ public class LoanService : ILoanService
             Amount = amount,
             PaymentDate = DateTime.UtcNow,
             Notes = notes,
-            PaymentMethod = paymentMethod,
+            // Column is NOT NULL — requests may omit it, so default like the
+            // checkout endpoint does.
+            PaymentMethod = paymentMethod ?? "cash",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -188,9 +207,15 @@ public class LoanService : ILoanService
         _context.LoanPayments.Add(payment);
 
         loan.PaidAmount = (loan.PaidAmount ?? 0) + amount;
-        loan.RemainingAmount = (loan.RemainingAmount ?? 0) - amount;
 
-        if (loan.RemainingAmount <= 0)
+        // RemainingAmount is not persisted (EF-ignored) — on a freshly loaded
+        // entity it's null, so derive the real outstanding amount from the
+        // persisted columns. Using the transient property marked every loan
+        // "paid_off" after its first payment.
+        var remaining = (loan.TotalAmount ?? 0) - loan.PaidAmount.Value;
+        loan.RemainingAmount = remaining;
+
+        if (remaining <= 0)
         {
             loan.Status = "paid_off";
             loan.PaidAt = DateTime.UtcNow;
@@ -244,6 +269,7 @@ public class LoanService : ILoanService
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+        FillRemaining(data);
 
         return new PagedResult<Loan>
         {
@@ -273,6 +299,7 @@ public class LoanService : ILoanService
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+        FillRemaining(data);
 
         return new PagedResult<Loan>
         {

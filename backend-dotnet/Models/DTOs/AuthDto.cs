@@ -43,9 +43,12 @@ public class MemberDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
+    // Same key as /member/profile and the frontend Member type.
+    [System.Text.Json.Serialization.JsonPropertyName("membership_id")]
     public string Identifier { get; set; } = null!;
     public string? Email { get; set; }
     public string? Phone { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("avatar_path")]
     public string? Avatar { get; set; }
     public string? Locale { get; set; }
     public DateTime? JoinDate { get; set; }

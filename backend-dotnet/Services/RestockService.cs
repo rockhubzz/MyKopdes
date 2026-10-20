@@ -46,17 +46,19 @@ public class RestockService : IRestockService
         _context.RestockingRecords.Add(record);
         await _context.SaveChangesAsync();
 
-        // Update item stock and cost
-        var item = await _context.Items.FindAsync(record.ItemId);
-        if (item != null)
-        {
-            item.Stock += record.Quantity;
-            // Update average cost: (old_cost * old_qty + new_cost * new_qty) / total_qty
-            var oldTotal = (item.Cost ?? 0) * (item.Stock - record.Quantity ?? 0);
-            var newTotal = oldTotal + ((record.CostPerUnit ?? 0) * record.Quantity);
-            item.Cost = item.Stock > 0 ? newTotal / item.Stock : 0;
-            await _context.SaveChangesAsync();
-        }
+        // Atomically bump stock and recompute the weighted average cost in a
+        // single statement (cost_price is computed against the pre-update
+        // stock: MySQL applies SET clauses left-to-right). Reading the item
+        // into memory and writing absolute values back loses updates when
+        // two restocks land concurrently.
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE items SET
+                cost_price = CASE WHEN COALESCE(current_stock, 0) + {1} > 0
+                    THEN ROUND(((COALESCE(cost_price, 0) * COALESCE(current_stock, 0)) + ({2} * {1})) / (COALESCE(current_stock, 0) + {1}), 2)
+                    ELSE COALESCE(cost_price, 0) END,
+                current_stock = COALESCE(current_stock, 0) + {1}
+              WHERE id = {0}",
+            record.ItemId, record.Quantity, record.CostPerUnit ?? 0);
 
         await transaction.CommitAsync();
         return await GetByIdAsync(record.Id) ?? record;

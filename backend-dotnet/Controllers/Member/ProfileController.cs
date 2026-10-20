@@ -22,6 +22,15 @@ public class MemberProfileController : ControllerBase
         _context = context;
     }
 
+    [HttpGet("me")]
+    [Authorize(Roles = "member")]
+    public async Task<ActionResult<object>> GetMe()
+    {
+        // The member layout revalidates its cached profile against this
+        // endpoint on every mount; same shape as /member/profile.
+        return await GetProfile();
+    }
+
     [HttpGet("profile")]
     [Authorize(Roles = "member")]
     public async Task<ActionResult<object>> GetProfile()

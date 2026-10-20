@@ -201,22 +201,19 @@ public class TransactionService : ITransactionService
                 _context.Transactions.Add(transactionEntity);
                 await _context.SaveChangesAsync();
 
-                // Batch-load all purchased items in a single query instead of one
-                // FindAsync per line (N+1) — checkout latency matters at the till.
-                var itemIds = items.Select(i => i.ItemId).Distinct().ToList();
-                var stockById = await _context.Items
-                    .Where(i => itemIds.Contains(i.Id))
-                    .ToDictionaryAsync(i => i.Id);
-
+                // Deduct stock atomically per line: send `current_stock =
+                // current_stock - qty` rather than the absolute value captured
+                // by the earlier read. Absolute writes lose updates when two
+                // tills check out the same item concurrently.
                 foreach (var item in items)
                 {
                     item.TransactionId = transactionEntity.Id;
                     item.CreatedAt = DateTime.UtcNow;
                     _context.TransactionItems.Add(item);
 
-                    // Deduct stock
-                    if (stockById.TryGetValue(item.ItemId, out var dbItem))
-                        dbItem.Stock -= item.Quantity;
+                    await _context.Items
+                        .Where(i => i.Id == item.ItemId)
+                        .ExecuteUpdateAsync(s => s.SetProperty(i => i.Stock, i => i.Stock - item.Quantity));
                 }
 
                 await _context.SaveChangesAsync();

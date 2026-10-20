@@ -39,24 +39,59 @@ public class MemberService : IMemberService
 
     public async Task<Member> CreateAsync(Member member)
     {
-        // Generate membership_id if not provided
-        if (string.IsNullOrEmpty(member.Identifier))
-        {
-            var today = DateTime.UtcNow.ToString("yyMM");
-            var count = await _context.Members.CountAsync(m => m.CreatedAt >= DateTime.UtcNow.Date);
-            var nextNumber = count + 1;
-            member.Identifier = $"KOP-{today}-{nextNumber:D4}";
-        }
-
         if (member.JoinDate == null)
             member.JoinDate = DateTime.UtcNow;
-        member.IsActive = member.IsActive;
+
+        // Hash the password with bcrypt (same scheme AuthService verifies at
+        // member login). The admin members UI sends a plaintext password on
+        // create — storing it as-is would make the member unable to log in.
+        if (!string.IsNullOrEmpty(member.Password) && !member.Password.StartsWith("$2"))
+        {
+            member.Password = BCrypt.Net.BCrypt.HashPassword(member.Password);
+        }
+
+        // Generate membership_id if not provided. Derive the next number from
+        // the highest existing identifier with the same yyMM prefix — counting
+        // today's rows collides with existing IDs whenever members were seeded
+        // on the same day (duplicate-key 500).
+        if (string.IsNullOrEmpty(member.Identifier))
+        {
+            var prefix = $"KOP-{DateTime.UtcNow:yyMM}-";
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var last = await _context.Members
+                    .Where(m => m.Identifier.StartsWith(prefix))
+                    .OrderByDescending(m => m.Identifier)
+                    .Select(m => m.Identifier)
+                    .FirstOrDefaultAsync();
+                var nextNumber = last != null && int.TryParse(last.AsSpan(prefix.Length), out var n) ? n + 1 : 1;
+                member.Identifier = $"{prefix}{nextNumber:D4}";
+
+                try
+                {
+                    member.CreatedAt = DateTime.UtcNow;
+                    member.UpdatedAt = DateTime.UtcNow;
+                    _context.Members.Add(member);
+                    await _context.SaveChangesAsync();
+                    return member;
+                }
+                catch (DbUpdateException ex) when (IsDuplicateKey(ex))
+                {
+                    _context.Entry(member).State = EntityState.Detached;
+                    if (attempt == 2) throw;
+                }
+            }
+        }
+
         member.CreatedAt = DateTime.UtcNow;
         member.UpdatedAt = DateTime.UtcNow;
         _context.Members.Add(member);
         await _context.SaveChangesAsync();
         return member;
     }
+
+    private static bool IsDuplicateKey(DbUpdateException ex)
+        => ex.InnerException is MySqlConnector.MySqlException { Number: 1062 };
 
     public async Task<Member> UpdateAsync(int id, Member member)
     {
@@ -70,6 +105,15 @@ public class MemberService : IMemberService
         existing.IsActive = member.IsActive;
         existing.Avatar = member.Avatar;
         existing.Locale = member.Locale;
+        // The members UI sends a password only when the admin sets a new one
+        // (empty = keep the current). Hash it like at create — member login
+        // verifies with bcrypt.
+        if (!string.IsNullOrEmpty(member.Password))
+        {
+            existing.Password = member.Password.StartsWith("$2")
+                ? member.Password
+                : BCrypt.Net.BCrypt.HashPassword(member.Password);
+        }
         existing.UpdatedAt = DateTime.UtcNow;
 
         _context.Members.Update(existing);

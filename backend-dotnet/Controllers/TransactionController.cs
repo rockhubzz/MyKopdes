@@ -298,8 +298,11 @@ public class TransactionController : ControllerBase
                             CreatedAt = DateTime.UtcNow
                         });
 
-                        // itemsById holds tracked entities, so this is recorded.
-                        item.Stock -= line.Quantity;
+                        // Atomic delta: concurrent tills must not overwrite
+                        // each other's deduction (absolute writes lose updates).
+                        await _context.Items
+                            .Where(i => i.Id == item.Id)
+                            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Stock, i => i.Stock - line.Quantity));
                     }
 
                     await _context.SaveChangesAsync();
