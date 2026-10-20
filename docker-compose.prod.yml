@@ -4,7 +4,11 @@
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-#   docker compose -f docker-compose.prod.yml exec backend php artisan migrate --force
+#
+# The MySQL container auto-creates the database and loads the demo schema +
+# seed data on the FIRST boot (empty volume) from ./mysql/init. Reset a used
+# volume with: docker compose -f docker-compose.prod.yml exec -T mysql \
+#   ... (see scripts/db-reset.sh)
 
 networks:
   koperasi_net:
@@ -12,7 +16,7 @@ networks:
 
 volumes:
   mysql_data:
-  backend_storage:
+  backend-dotnet-storage:
 
 services:
   mysql:
@@ -20,47 +24,53 @@ services:
     container_name: koperasi_mysql
     restart: always
     environment:
-      MYSQL_DATABASE: ${DB_DATABASE}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE:-koperasi}
+      MYSQL_USER: ${DB_USERNAME:-koperasi}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-koperasi_secret}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret}
+    # Auto-seed: runs on the first boot of an EMPTY data volume only.
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - koperasi_net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_secret}"]
       interval: 10s
       timeout: 5s
       retries: 20
     # No published port: only reachable from other containers on koperasi_net.
 
-  backend:
+  # ---- .NET 8 backend (all API routes) ----
+  backend-dotnet:
     build:
-      context: ./backend
+      context: ./backend-dotnet
       dockerfile: Dockerfile
-      target: production
-    container_name: koperasi_backend
+    container_name: koperasi_backend_dotnet
     restart: always
     depends_on:
       mysql:
         condition: service_healthy
-    env_file:
-      - .env.production
     environment:
-      DB_HOST: mysql
-      DB_PORT: 3306
-      APP_ENV: production
-      APP_DEBUG: "false"
+      DB_CONNECTION_STRING: "server=mysql;port=3306;database=${DB_DATABASE:-koperasi};user=${DB_USERNAME:-koperasi};password=${DB_PASSWORD:-koperasi_secret};SslMode=none;AllowPublicKeyRetrieval=true"
+      JWT_KEY: ${JWT_KEY:-KoperasiSuperSecretKeyForJwtTokens2024!}
+      JWT_ISSUER: ${APP_URL:-http://localhost}
+      JWT_AUDIENCE: ${APP_URL:-http://localhost}
+      JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES:-1440}
+      ASPNETCORE_URLS: http://+:80
+      ASPNETCORE_ENVIRONMENT: Production
     volumes:
-      - backend_storage:/var/www/html/storage
+      - backend-dotnet-storage:/app/backups
+      # Uploaded images (avatars, item photos) persist across container
+      # recreation and are served at /storage/*.
+      - backend-dotnet-storage:/app/wwwroot/storage
     networks:
       - koperasi_net
     expose:
-      - "9000"
+      - "80"
     healthcheck:
-      test: ["CMD-SHELL", "test -f /var/www/html/vendor/autoload.php && php-fpm -t || exit 1"]
-      interval: 15s
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
@@ -71,13 +81,13 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
     container_name: koperasi_frontend
     restart: always
     depends_on:
-      - backend
+      - backend-dotnet
     env_file:
-      - .env.production
+      - ./frontend/.env
     environment:
       NODE_ENV: production
     networks:
@@ -96,7 +106,7 @@ services:
     container_name: koperasi_nginx
     restart: always
     depends_on:
-      backend:
+      backend-dotnet:
         condition: service_healthy
       frontend:
         condition: service_started
@@ -106,6 +116,5 @@ services:
     volumes:
       - ./nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
-      - backend_storage:/var/www/html/storage:ro
     networks:
       - koperasi_net

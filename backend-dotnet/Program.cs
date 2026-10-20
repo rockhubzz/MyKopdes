@@ -153,6 +153,7 @@ builder.Services.AddScoped<IRestockService, RestockService>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<IShuService, ShuService>();
 builder.Services.AddScoped<IItemCategoryService, ItemCategoryService>();
+builder.Services.AddSingleton<IFileUploadService, FileUploadService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<ILoanProductService, LoanProductService>();
@@ -185,6 +186,25 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 
 app.UseResponseCompression();
 app.UseCorsPolicy();
+
+// Serve user-uploaded images (item photos, avatars) from wwwroot/storage at
+// /storage/*, so nginx can proxy them straight from the frontend's
+// /storage/{avatar_path|image_path} URLs. Public by design: uploads are not
+// role-gated data (Laravel served them the same way).
+var storageRoot = Path.Combine(app.Environment.ContentRootPath, "wwwroot", "storage");
+Directory.CreateDirectory(storageRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(storageRoot),
+    RequestPath = "/storage",
+    ServeUnknownFileTypes = false,
+    OnPrepareResponse = ctx =>
+    {
+        // Profile/item images change on replace; don't let proxies cache hard.
+        ctx.Context.Response.Headers.CacheControl = "public,max-age=300";
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<RequestLoggingMiddleware>();

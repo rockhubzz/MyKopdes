@@ -27,6 +27,7 @@ Usage:
 Exit code 0 = all passed, 1 = failures (CI-friendly).
 """
 import argparse
+import base64
 import json
 import re
 import subprocess
@@ -40,12 +41,17 @@ from datetime import datetime, timezone
 
 MARKER = f"E2E_{uuid.uuid4().hex[:8]}"
 
+# A valid 1x1 transparent PNG (uploaded as test image content).
+PNG_1PX = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+    "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+
 # ---------------------------------------------------------------- harness ---
 PASS = 0
 FAIL = 0
 FAILURES = []
 VERBOSE = False
-CREATED = {"items": [], "categories": [], "members": [], "loans": [], "transactions": [], "suppliers": []}
+CREATED = {"items": [], "categories": [], "members": [], "loans": [], "transactions": [], "suppliers": [], "image_files": []}
 STAFF_TOKEN = None
 MEMBER_TOKEN = None
 
@@ -103,21 +109,29 @@ def sql(query):
     return out.stdout.strip()
 
 
-def multipart(fields):
-    """Build a multipart/form-data body exactly like the frontend's FormData
-    (which the item create/update endpoints require)."""
+def multipart(fields, files=()):
+    """Build a multipart/form-data body exactly like the frontend's FormData.
+    `files` is a list of {name, filename, content, ctype} dicts for binary parts
+    (the avatar / item-image upload path)."""
     boundary = uuid.uuid4().hex
-    parts = []
+    parts = [b"--" + boundary.encode()]
     for k, v in fields.items():
-        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n")
-    body = "".join(parts) + f"--{boundary}--\r\n"
-    return body.encode(), f"multipart/form-data; boundary={boundary}"
+        parts.append(f"Content-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n--{boundary}".encode())
+    for f in files:
+        head = (f"Content-Disposition: form-data; name=\"{f['name']}\"; "
+                f"filename=\"{f['filename']}\"\r\n"
+                f"Content-Type: {f.get('ctype', 'application/octet-stream')}\r\n\r\n").encode()
+        parts.append(head)
+        parts.append(f["content"])
+        parts.append(f"\r\n--{boundary}".encode())
+    body = b"\r\n".join(parts) + b"--\r\n"
+    return body, f"multipart/form-data; boundary={boundary}"
 
 
-def post_form(path, fields, token, base="http://localhost"):
+def post_form(path, fields, token, base="http://localhost", files=None):
     """POST multipart form-data (the frontend's FormData path for item
-    create/update); returns (status, parsed-json)."""
-    body, ctype = multipart(fields)
+    create/update and avatar uploads); returns (status, parsed-json)."""
+    body, ctype = multipart(fields, files or [])
     r = urllib.request.Request(base + path, data=body, method="POST")
     r.add_header("Content-Type", ctype)
     r.add_header("Authorization", f"Bearer {token}")
@@ -141,6 +155,27 @@ def first_member_id():
     """Membership ID of the first active member (the seeder generates random
     IDs, so it must be resolved rather than hardcoded)."""
     return sql("SELECT membership_id FROM members WHERE is_active=1 ORDER BY id LIMIT 1")
+
+
+def _fetch_image(path, base="http://localhost"):
+    """GET a /storage image through nginx the way a browser would; returns
+    (status, raw-bytes-or-parsed, headers)."""
+    r = urllib.request.Request(base + path, method="GET")
+    r.add_header("Accept", "image/png,image/*")
+    try:
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            return resp.status, resp.read(), dict(resp.headers)
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, e.read(), dict(e.headers)
+        except Exception:
+            return e.code, b"", {}
+
+
+def _rm_file_in_container(path):
+    """Delete an uploaded file inside the backend container (cleanup)."""
+    subprocess.run(["docker", "exec", "koperasi_backend_dotnet", "rm", "-f", path],
+                   capture_output=True, timeout=20)
 
 
 def suite_infra(base):
@@ -437,8 +472,86 @@ def suite_checkout(base):
     check("race stock exactly 10-4=6", db == "6", f"db={db}")
 
 
+def suite_images(base):
+    section("5. Image uploads + /storage serving (the alt-text bug)")
+    png = {"name": "image", "filename": "test.png", "content": PNG_1PX, "ctype": "image/png"}
+
+    # --- Staff avatar (the StaffProfileForm flow: POST multipart) ---
+    s, d = post_form("/api/auth/staff/profile", {"name": "Budi Santoso"},
+                     STAFF_TOKEN, base, files=[png])
+    check("staff avatar upload 2xx", s == 200, f"got {s} {d}")
+    staff_avatar = (d or {}).get("avatar_path") if isinstance(d, dict) else None
+    check("staff avatar stored storage-relative (avatars/...)",
+          bool(staff_avatar) and staff_avatar.startswith("avatars/"), f"avatar_path={staff_avatar}")
+    if staff_avatar:
+        STATUS, IMG, HDRS = _fetch_image(f"/storage/{staff_avatar}", base)
+        check("staff avatar SERVES via /storage (no more alt-text)", STATUS == 200, f"got {STATUS}")
+        check("avatar response is a real image", (HDRS.get("Content-Type") or "").startswith("image/"),
+              f"ct={HDRS.get('Content-Type')}")
+        sql("UPDATE users SET avatar_path=NULL WHERE id=1")
+        _rm_file_in_container(f"/app/wwwroot/storage/{staff_avatar}")
+
+    # --- Member avatar (the member profile-page flow: POST multipart) ---
+    if MEMBER_TOKEN:
+        s, d = post_form("/api/member/profile", {}, MEMBER_TOKEN, base, files=[png])
+        check("member avatar upload 2xx", s == 200, f"got {s} {d}")
+        member_avatar = (d or {}).get("avatar_path") if isinstance(d, dict) else None
+        check("member avatar stored storage-relative",
+              bool(member_avatar) and member_avatar.startswith("avatars/"), f"avatar_path={member_avatar}")
+        if member_avatar:
+            STATUS, _, HDRS = _fetch_image(f"/storage/{member_avatar}", base)
+            check("member avatar serves via /storage", STATUS == 200, f"got {STATUS}")
+        s, d = post_form("/api/member/profile", {"remove_avatar": "1"}, MEMBER_TOKEN, base)
+        check("member avatar removal 200", s == 200, f"got {s}")
+        check("avatar_path cleared after removal", not (d or {}).get("avatar_path"),
+              f"avatar_path={(d or {}).get('avatar_path')}")
+        if member_avatar:
+            _rm_file_in_container(f"/app/wwwroot/storage/{member_avatar}")
+
+    # --- Item image (owner items-page flow: create with image, then replace) ---
+    fields = {"name": f"{MARKER} ImageItem", "sku": f"{MARKER}-IMG",
+              "barcode": f"995{uuid.uuid4().hex[:10]}", "unit_price": "9000",
+              "cost_price": "5000", "current_stock": "12", "min_stock_threshold": "3"}
+    s, d = post_form("/api/items", fields, STAFF_TOKEN, base, files=[png])
+    check("item with image created 2xx", s in (200, 201), f"got {s} {d}")
+    item_id = (d or {}).get("id") if isinstance(d, dict) else None
+    img_path = (d or {}).get("image_path") if isinstance(d, dict) else None
+    check("item image stored storage-relative (items/...)",
+          bool(img_path) and img_path.startswith("items/"), f"image_path={img_path}")
+    if item_id:
+        CREATED["items"].append(item_id)
+    if img_path:
+        STATUS, _, HDRS = _fetch_image(f"/storage/{img_path}", base)
+        check("item image serves via /storage", STATUS == 200, f"got {STATUS}")
+        CREATED["image_files"].append(img_path)
+    else:
+        return
+
+    # Replace the image → old file removed, new one served
+    s, d = post_form(f"/api/items/{item_id}",
+                     dict(fields, sku=f"{MARKER}-IMG", _method="PUT"),
+                     STAFF_TOKEN, base, files=[png])
+    check("item image replace via _method=PUT 200", s == 200, f"got {s} {d}")
+    img_path2 = (d or {}).get("image_path") if isinstance(d, dict) else None
+    check("replacement image path is new", bool(img_path2) and img_path2 != img_path,
+          f"image_path={img_path2}")
+    if img_path2:
+        STATUS, _, _ = _fetch_image(f"/storage/{img_path2}", base)
+        check("replacement image serves via /storage", STATUS == 200, f"got {STATUS}")
+        CREATED["image_files"].append(img_path2)
+        STATUS, _, _ = _fetch_image(f"/storage/{img_path}", base)
+        check("old image removed after replace", STATUS == 404, f"got {STATUS}")
+
+    # Rejection of non-image uploads
+    s, d = post_form(f"/api/items/{item_id}", dict(fields, _method="PUT"), STAFF_TOKEN, base,
+                     files=[{"name": "image", "filename": "evil.exe",
+                             "content": b"MZ", "ctype": "application/octet-stream"}])
+    check("non-image upload rejected with 400", s == 400, f"got {s} {d}")
+
+
+# --------------------------------------------------------------------- 7 ----
 def suite_loans(base):
-    section("6. Loans (create -> approve -> pay -> paid_off)")
+    section("7. Loans (create -> approve -> pay -> paid_off)")
 
     s, products, _ = req("GET", "/api/loan-products", token=STAFF_TOKEN, base=base)
     product_list = products.get("data", []) if isinstance(products, dict) else products
@@ -502,7 +615,7 @@ def suite_loans(base):
 
 
 def suite_restocks(base):
-    section("7. Restocks")
+    section("8. Restocks")
     # Restock records can't be deleted via API, so run against a soft-deleted
     # e2e item and leave one marked record behind.
     status, item = post_form("/api/items",
@@ -536,7 +649,7 @@ def suite_restocks(base):
 
 
 def suite_reports(base):
-    section("8. Reports consistency vs raw SQL")
+    section("9. Reports consistency vs raw SQL")
     s, d, _ = req("GET", "/api/dashboard/summary", token=STAFF_TOKEN, base=base)
     check("dashboard summary 200", s == 200, f"got {s}")
 
@@ -560,7 +673,7 @@ def suite_reports(base):
 
 
 def suite_contract(base):
-    section("9. Frontend contract shapes")
+    section("10. Frontend contract shapes")
     # The exact keys the UI components rely on.
     s, d, _ = req("GET", "/api/items?page=1&per_page=1", token=STAFF_TOKEN, base=base)
     item_keys = set((d or {}).get("data", [{}])[0] or {})
@@ -637,6 +750,12 @@ def cleanup(base):
         if s in (404, 405):
             sql_safe(f"DELETE FROM item_categories WHERE id={cat_id} AND name LIKE '%{MARKER}%';")
 
+    # Remove uploads made outside the soft-delete path (the item hard-delete
+    # SQL above doesn't touch files; staff avatars were cleared in-suite).
+    for img in CREATED.get("image_files", []):
+        _rm_file_in_container(f"/app/wwwroot/storage/{img}")
+    sql_safe("UPDATE users SET avatar_path=NULL WHERE avatar_path LIKE 'avatars/%';")
+
     print(f"  cleaned items={CREATED['items']} categories={CREATED['categories']} "
           f"members={CREATED['members']} loans={CREATED['loans']} transactions={CREATED['transactions']}")
 
@@ -669,6 +788,7 @@ def main():
         suite_auth(args.base)
         suite_items_categories(args.base)
         suite_members(args.base)
+        suite_images(args.base)
         suite_checkout(args.base)
         suite_loans(args.base)
         suite_restocks(args.base)

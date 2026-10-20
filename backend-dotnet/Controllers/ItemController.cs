@@ -14,14 +14,17 @@ public class ItemController : ControllerBase
     private readonly IItemCategoryService _categoryService;
     private readonly ISupplierService _supplierService;
     private readonly IDiscountService _discountService;
+    private readonly IFileUploadService _fileUploads;
 
     public ItemController(IItemService itemService, IItemCategoryService categoryService,
-        ISupplierService supplierService, IDiscountService discountService)
+        ISupplierService supplierService, IDiscountService discountService,
+        IFileUploadService fileUploads)
     {
         _itemService = itemService;
         _categoryService = categoryService;
         _supplierService = supplierService;
         _discountService = discountService;
+        _fileUploads = fileUploads;
     }
 
     [HttpGet]
@@ -88,19 +91,15 @@ public class ItemController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         };
 
+        // Image stored as a storage-relative path ("items/…") so the frontend
+        // /storage/{image_path} URL resolves via the static-files middleware.
         var files = Request.Form.Files;
         if (files.Count > 0 && files[0].Length > 0)
         {
-            var file = files[0];
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "storage", "items");
-            Directory.CreateDirectory(uploadsDir);
-            var filename = $"item_{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
-            var filepath = Path.Combine(uploadsDir, filename);
-            using (var stream = new FileStream(filepath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-            item.Image = filename;
+            var saved = await _fileUploads.SaveImageAsync(files[0], "items", "item");
+            if (saved == null)
+                return BadRequest(new { message = "Unsupported image type or file too large (jpg/png/webp/gif, max 10MB)" });
+            item.Image = saved;
         }
 
         var created = await _itemService.CreateAsync(item);
@@ -144,19 +143,16 @@ public class ItemController : ControllerBase
                 IsActive = form["is_active"] == "" || form["is_active"] == "true" || form["is_active"] == "1",
             };
 
+            // Image stored as a storage-relative path ("items/…") so the
+            // frontend /storage/{image_path} URL resolves; the replaced file
+            // is deleted so uploads don't accumulate.
             var files = Request.Form.Files;
             if (files.Count > 0 && files[0].Length > 0)
             {
-                var file = files[0];
-                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "storage", "items");
-                Directory.CreateDirectory(uploadsDir);
-                var filename = $"item_{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
-                var filepath = Path.Combine(uploadsDir, filename);
-                using (var stream = new FileStream(filepath, FileMode.Create))
-                {
-                    await file.CopyToAsync(stream);
-                }
-                item.Image = filename;
+                var saved = await _fileUploads.SaveImageAsync(files[0], "items", "item");
+                if (saved == null)
+                    return BadRequest(new { message = "Unsupported image type or file too large (jpg/png/webp/gif, max 10MB)" });
+                item.Image = saved;
             }
 
             // Only update fields that were provided in the form
@@ -174,7 +170,12 @@ public class ItemController : ControllerBase
             if (!string.IsNullOrEmpty(form["unit_of_measure"])) existing.Unit = item.Unit;
             if (!string.IsNullOrEmpty(form["expiry_date"])) existing.ExpiryDate = item.ExpiryDate;
             if (!string.IsNullOrEmpty(form["is_active"])) existing.IsActive = item.IsActive;
-            if (item.Image != null) existing.Image = item.Image;
+            if (item.Image != null)
+            {
+                // Replace: remove the superseded file first.
+                _fileUploads.DeleteStoredImage(existing.Image);
+                existing.Image = item.Image;
+            }
 
             await _itemService.UpdateAsync(id, existing);
             return Ok(existing);

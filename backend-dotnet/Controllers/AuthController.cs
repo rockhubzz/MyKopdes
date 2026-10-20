@@ -11,10 +11,12 @@ namespace MyKopdes.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IFileUploadService _fileUploads;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IFileUploadService fileUploads)
     {
         _authService = authService;
+        _fileUploads = fileUploads;
     }
 
     // Staff login — matches frontend /api/auth/staff/login
@@ -68,19 +70,16 @@ public class AuthController : ControllerBase
         if (!string.IsNullOrEmpty(form["phone"])) user.Phone = form["phone"];
         if (!string.IsNullOrEmpty(form["shift_label"])) user.ShiftLabel = form["shift_label"];
 
-        // Avatar upload
+        // Avatar upload — stored as a storage-relative path so the frontend's
+        // /storage/{avatar_path} URL resolves (static-files middleware).
         var avatar = form.Files.FirstOrDefault();
         if (avatar != null && avatar.Length > 0)
         {
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "storage", "avatars");
-            Directory.CreateDirectory(uploadsDir);
-            var filename = $"user_{user.Id}_{DateTime.UtcNow.Ticks}{Path.GetExtension(avatar.FileName)}";
-            var filepath = Path.Combine(uploadsDir, filename);
-            using (var stream = new FileStream(filepath, FileMode.Create))
-            {
-                await avatar.CopyToAsync(stream);
-            }
-            user.Avatar = filename;
+            var saved = await _fileUploads.SaveImageAsync(avatar, "avatars", $"user_{user.Id}");
+            if (saved == null)
+                return BadRequest(new { message = "Unsupported image type or file too large (jpg/png/webp/gif, max 10MB)" });
+            if (!string.IsNullOrEmpty(user.Avatar)) _fileUploads.DeleteStoredImage(user.Avatar);
+            user.Avatar = saved;
         }
 
         await _authService.UpdateUserAsync(user);

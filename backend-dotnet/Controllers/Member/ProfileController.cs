@@ -15,11 +15,13 @@ public class MemberProfileController : ControllerBase
 {
     private readonly IMemberService _memberService;
     private readonly KoperasiDbContext _context;
+    private readonly IFileUploadService _fileUploads;
 
-    public MemberProfileController(IMemberService memberService, KoperasiDbContext context)
+    public MemberProfileController(IMemberService memberService, KoperasiDbContext context, IFileUploadService fileUploads)
     {
         _memberService = memberService;
         _context = context;
+        _fileUploads = fileUploads;
     }
 
     [HttpGet("me")]
@@ -142,34 +144,20 @@ public class MemberProfileController : ControllerBase
             member.Password = BCrypt.Net.BCrypt.HashPassword(form["password"]);
         }
 
-        // Avatar upload
+        // Avatar upload — stored as a storage-relative path so the frontend's
+        // /storage/{avatar_path} URL resolves (static-files middleware).
         var avatar = form.Files.FirstOrDefault();
         if (avatar != null && avatar.Length > 0)
         {
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "storage", "avatars");
-            Directory.CreateDirectory(uploadsDir);
-            var filename = $"member_{member.Id}_{DateTime.UtcNow.Ticks}{Path.GetExtension(avatar.FileName)}";
-            var filepath = Path.Combine(uploadsDir, filename);
-            using (var stream = new FileStream(filepath, FileMode.Create))
-            {
-                await avatar.CopyToAsync(stream);
-            }
-            // Remove old avatar
-            if (!string.IsNullOrEmpty(member.Avatar))
-            {
-                var oldPath = Path.Combine(uploadsDir, member.Avatar);
-                if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
-            }
-            member.Avatar = filename;
+            var saved = await _fileUploads.SaveImageAsync(avatar, "avatars", $"member_{member.Id}");
+            if (saved == null)
+                return BadRequest(new { message = "Unsupported image type or file too large (jpg/png/webp/gif, max 10MB)" });
+            _fileUploads.DeleteStoredImage(member.Avatar);
+            member.Avatar = saved;
         }
         else if (form["remove_avatar"] == "1")
         {
-            if (!string.IsNullOrEmpty(member.Avatar))
-            {
-                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "storage", "avatars");
-                var oldPath = Path.Combine(uploadsDir, member.Avatar);
-                if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
-            }
+            _fileUploads.DeleteStoredImage(member.Avatar);
             member.Avatar = null;
         }
 
