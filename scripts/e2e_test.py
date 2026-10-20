@@ -137,6 +137,12 @@ def now_iso():
 
 
 # ------------------------------------------------------------------ suites ---
+def first_member_id():
+    """Membership ID of the first active member (the seeder generates random
+    IDs, so it must be resolved rather than hardcoded)."""
+    return sql("SELECT membership_id FROM members WHERE is_active=1 ORDER BY id LIMIT 1")
+
+
 def suite_infra(base):
     section("1. Health / infrastructure")
     s, d, _ = req("GET", "/health", base=base)
@@ -188,12 +194,13 @@ def suite_auth(base):
     check("protected endpoint rejects missing token", s == 401, f"got {s}")
 
     # Member auth
+    seeded_mid = first_member_id()
     s, d, _ = req("POST", "/api/auth/member/login",
-                  {"identifier": "KOP-2610-0001", "password": "password"}, base=base)
+                  {"identifier": seeded_mid, "password": "password"}, base=base)
     check("member login 200", s == 200, f"got {s}")
     if s == 200:
         check("member login returns member shape (membership_id key)",
-              isinstance(d, dict) and d.get("member", {}).get("membership_id") == "KOP-2610-0001",
+              isinstance(d, dict) and d.get("member", {}).get("membership_id") == seeded_mid,
               f"keys={list((d or {}).keys())}")
         MEMBER_TOKEN = d.get("token")
 
@@ -356,7 +363,7 @@ def suite_checkout(base):
           f"total={d.get('total')}")
 
     # Preview with member discount (seeded "Diskon Anggota 5%" member scope)
-    body_m = dict(body, member_identifier="KOP-2610-0001")
+    body_m = dict(body, member_identifier=first_member_id())
     s, d, _ = req("POST", "/api/transactions/preview", body_m, token=STAFF_TOKEN, base=base)
     check("member discount preview applies 5%", (d or {}).get("discount_amount") == 1000,
           f"discount_amount={d.get('discount_amount')} discount={d.get('discount')}")
@@ -654,7 +661,7 @@ def main():
         sys.exit(1)
     STAFF_TOKEN = d["token"]
     s, d, _ = req("POST", "/api/auth/member/login",
-                  {"identifier": "KOP-2610-0001", "password": "password"}, base=args.base)
+                  {"identifier": first_member_id(), "password": "password"}, base=args.base)
     MEMBER_TOKEN = d.get("token") if s == 200 else None
 
     try:
