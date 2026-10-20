@@ -13,9 +13,18 @@ public class DiscountService : IDiscountService
         _context = context;
     }
 
-    public async Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15)
+    public async Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = false)
     {
-        return await _context.Discounts
+        var query = _context.Discounts.AsQueryable();
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(d => d.Name.Contains(search) || (d.Description != null && d.Description.Contains(search)));
+        }
+        if (activeOnly)
+        {
+            query = query.Where(d => d.IsActive);
+        }
+        return await query
             .Include(d => d.Category)
             .OrderByDescending(d => d.CreatedAt)
             .Skip((page - 1) * pageSize)
@@ -23,9 +32,18 @@ public class DiscountService : IDiscountService
             .ToListAsync();
     }
 
-    public async Task<int> GetTotalCountAsync()
+    public async Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = false)
     {
-        return await _context.Discounts.CountAsync();
+        var query = _context.Discounts.AsQueryable();
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(d => d.Name.Contains(search) || (d.Description != null && d.Description.Contains(search)));
+        }
+        if (activeOnly)
+        {
+            query = query.Where(d => d.IsActive);
+        }
+        return await query.CountAsync();
     }
 
     public async Task<Discount?> GetByIdAsync(int id)
@@ -49,18 +67,21 @@ public class DiscountService : IDiscountService
         var existing = await _context.Discounts.FindAsync(id);
         if (existing == null) throw new KeyNotFoundException("Discount not found");
 
-        existing.Name = discount.Name;
-        existing.Description = discount.Description;
-        existing.ItemId = discount.ItemId;
-        existing.CategoryId = discount.CategoryId;
-        existing.MemberId = discount.MemberId;
-        existing.DiscountRate = discount.DiscountRate;
-        existing.DiscountAmount = discount.DiscountAmount;
-        existing.Type = discount.Type;
-        existing.StartDate = discount.StartDate;
-        existing.EndDate = discount.EndDate;
+        existing.Name = discount.Name ?? existing.Name;
+        existing.Description = discount.Description ?? existing.Description;
+        existing.ItemId = discount.ItemId ?? existing.ItemId;
+        existing.CategoryId = discount.CategoryId ?? existing.CategoryId;
+        existing.MemberId = discount.MemberId ?? existing.MemberId;
+        if (discount.DiscountRate != 0)
+        {
+            existing.DiscountRate = discount.DiscountRate;
+        }
+        existing.DiscountAmount = discount.DiscountAmount ?? existing.DiscountAmount;
+        existing.Type = discount.Type ?? existing.Type;
+        existing.StartDate = discount.StartDate ?? existing.StartDate;
+        existing.EndDate = discount.EndDate ?? existing.EndDate;
         existing.IsActive = discount.IsActive;
-        existing.Scope = discount.Scope;
+        existing.Scope = discount.Scope ?? existing.Scope;
         existing.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -71,7 +92,32 @@ public class DiscountService : IDiscountService
     {
         var discount = await _context.Discounts.FindAsync(id);
         if (discount == null) return false;
-        _context.Discounts.Remove(discount);
+
+        if (force)
+        {
+            // Hard delete — permanent removal (used by the Delete button,
+            // and by Reactivate flows the same way items work).
+            _context.Discounts.Remove(discount);
+        }
+        else
+        {
+            // Plain DELETE from the UI = deactivate (soft), matching how
+            // items/members/users behave so a deactivated discount can be
+            // re-enabled with PUT { is_active: true }.
+            discount.IsActive = false;
+            discount.UpdatedAt = DateTime.UtcNow;
+            _context.Discounts.Update(discount);
+        }
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> SetActivationAsync(int id, bool active)
+    {
+        var discount = await _context.Discounts.FindAsync(id);
+        if (discount == null) return false;
+        discount.IsActive = active;
+        discount.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
     }

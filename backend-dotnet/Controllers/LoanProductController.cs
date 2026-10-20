@@ -22,10 +22,12 @@ public class LoanProductController : ControllerBase
     [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
     public async Task<ActionResult<PaginatedResponse<LoanProduct>>> Get(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "per_page")] int pageSize = 15)
+        [FromQuery(Name = "per_page")] int pageSize = 15,
+        [FromQuery] string? search = null,
+        [FromQuery(Name = "include_inactive")] bool includeInactive = false)
     {
-        var products = await _loanProductService.GetAllAsync(page, pageSize);
-        var total = await _loanProductService.GetTotalCountAsync();
+        var products = await _loanProductService.GetAllAsync(page, pageSize, search, !includeInactive);
+        var total = await _loanProductService.GetTotalCountAsync(search, !includeInactive);
         var totalPages = (int)Math.Ceiling((double)total / pageSize);
         return Ok(new PaginatedResponse<LoanProduct>
         {
@@ -69,11 +71,20 @@ public class LoanProductController : ControllerBase
         }
     }
 
+    [HttpPost("{id:int}/activate")]
+    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var ok = await _loanProductService.SetActivationAsync(id, true);
+        if (!ok) return NotFound(new { message = "Loan product not found" });
+        return Ok(new { message = "Loan product activated successfully" });
+    }
+
     [HttpDelete("{id:int}")]
     [Authorize(Roles = "admin,owner,shop_owner,employee")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
-        var success = await _loanProductService.DeleteAsync(id);
+        var success = await _loanProductService.DeleteAsync(id, force != 0);
         if (!success) return NotFound(new { message = "Loan product not found" });
         return Ok(new { message = "Loan product deleted successfully" });
     }

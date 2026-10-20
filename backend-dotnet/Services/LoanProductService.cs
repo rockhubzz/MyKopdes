@@ -13,9 +13,18 @@ public class LoanProductService : ILoanProductService
         _context = context;
     }
 
-    public async Task<List<LoanProduct>> GetAllAsync(int page = 1, int pageSize = 15)
+    public async Task<List<LoanProduct>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = false)
     {
-        return await _context.LoanProducts
+        var query = _context.LoanProducts.AsQueryable();
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(p => p.Name.Contains(search) || (p.Description != null && p.Description.Contains(search)));
+        }
+        if (activeOnly)
+        {
+            query = query.Where(p => p.IsActive == true);
+        }
+        return await query
             .OrderBy(p => p.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -63,11 +72,34 @@ public class LoanProductService : ILoanProductService
         return existing;
     }
 
-    public async Task<bool> DeleteAsync(int id)
+    public async Task<bool> DeleteAsync(int id, bool force = false)
     {
         var product = await _context.LoanProducts.FindAsync(id);
         if (product == null) return false;
-        _context.LoanProducts.Remove(product);
+
+        if (force)
+        {
+            // Hard delete — permanent removal.
+            _context.LoanProducts.Remove(product);
+        }
+        else
+        {
+            // Plain DELETE from the UI = deactivate (soft), so it can be
+            // re-enabled with PUT { is_active: true }.
+            product.IsActive = false;
+            product.UpdatedAt = DateTime.UtcNow;
+            _context.LoanProducts.Update(product);
+        }
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> SetActivationAsync(int id, bool active)
+    {
+        var product = await _context.LoanProducts.FindAsync(id);
+        if (product == null) return false;
+        product.IsActive = active;
+        product.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
     }
@@ -107,9 +139,18 @@ public class LoanProductService : ILoanProductService
         return decimal.TryParse(setting.Value, out var val) ? val : defaultValue;
     }
 
-    public async Task<int> GetTotalCountAsync()
+    public async Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = false)
     {
-        return await _context.LoanProducts.CountAsync();
+        var query = _context.LoanProducts.AsQueryable();
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(p => p.Name.Contains(search) || (p.Description != null && p.Description.Contains(search)));
+        }
+        if (activeOnly)
+        {
+            query = query.Where(p => p.IsActive == true);
+        }
+        return await query.CountAsync();
     }
 
     public async Task<List<LoanProduct>> GetActiveAsync()

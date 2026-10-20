@@ -22,9 +22,23 @@ public class UserController : ControllerBase
     [Authorize(Roles = "admin,owner")]
     public async Task<ActionResult<PaginatedResponse<dynamic>>> GetUsers(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "per_page")] int pageSize = 15)
+        [FromQuery(Name = "per_page")] int pageSize = 15,
+        [FromQuery] string? search = null,
+        [FromQuery(Name = "include_inactive")] bool includeInactive = false)
     {
-        var query = _context.Users
+        var query = _context.Users.AsQueryable();
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(u => u.Name.Contains(search) || u.Email.Contains(search) ||
+                                     (u.Phone != null && u.Phone.Contains(search)));
+        }
+        if (!includeInactive)
+        {
+            query = query.Where(u => u.IsActive);
+        }
+
+        var total = await query.CountAsync();
+        var users = await query
             .OrderByDescending(u => u.CreatedAt)
             .Select(u => new
             {
@@ -36,10 +50,7 @@ public class UserController : ControllerBase
                 shift_label = u.ShiftLabel,
                 u.IsActive,
                 u.CreatedAt
-            });
-
-        var total = await query.CountAsync();
-        var users = await query
+            })
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

@@ -13,12 +13,16 @@ public class MemberService : IMemberService
         _context = context;
     }
 
-    public async Task<List<Member>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null)
+    public async Task<List<Member>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = true)
     {
         var query = _context.Members.AsQueryable();
         if (!string.IsNullOrEmpty(search))
         {
             query = query.Where(m => m.Name.Contains(search) || m.Identifier.Contains(search) || (m.Phone != null && m.Phone.Contains(search)));
+        }
+        if (activeOnly)
+        {
+            query = query.Where(m => m.IsActive);
         }
         return await query
             .OrderByDescending(m => m.CreatedAt)
@@ -147,12 +151,16 @@ public class MemberService : IMemberService
             .ToListAsync();
     }
 
-    public async Task<int> GetTotalCountAsync(string? search = null)
+    public async Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = true)
     {
         var query = _context.Members.AsQueryable();
         if (!string.IsNullOrEmpty(search))
         {
             query = query.Where(m => m.Name.Contains(search) || m.Identifier.Contains(search) || (m.Phone != null && m.Phone.Contains(search)));
+        }
+        if (activeOnly)
+        {
+            query = query.Where(m => m.IsActive);
         }
         return await query.CountAsync();
     }

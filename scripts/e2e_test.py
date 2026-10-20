@@ -51,7 +51,8 @@ PASS = 0
 FAIL = 0
 FAILURES = []
 VERBOSE = False
-CREATED = {"items": [], "categories": [], "members": [], "loans": [], "transactions": [], "suppliers": [], "image_files": []}
+CREATED = {"items": [], "categories": [], "members": [], "loans": [], "transactions": [], "suppliers": [], "image_files": [],
+           "users": [], "discounts": [], "loan_products": []}
 STAFF_TOKEN = None
 MEMBER_TOKEN = None
 
@@ -366,6 +367,184 @@ def suite_members(base):
     check("member delete 200", s == 200, f"got {s}")
     # Member delete is a soft delete (is_active=0) — cleanup below purges the
     # row, so keep it in CREATED.
+
+
+def suite_listing_filters(base):
+    """Low-stock + include-inactive listing filters, and the deactivate /
+    reactivate round trip on every entity that supports it (the user-facing
+    'show inactive' checkboxes). Regression guard for the Laravel-parity
+    `?param=1` boolean binding and the soft-delete semantics."""
+    section("4b. Listing filters + deactivate/reactivate round trips")
+
+    def ids_of(path):
+        s, d, _ = req("GET", path if "?" in path else path + "?per_page=100",
+                      token=STAFF_TOKEN, base=base)
+        if not isinstance(d, dict) or "data" not in d:
+            return None, s, d
+        return [x["id"] for x in d["data"]], s, d
+
+    def ids(path):
+        got, _, _ = ids_of(path)
+        return got or []
+
+    # --- item filters ------------------------------------------------------
+    got, s, d = ids_of("/api/items?low_stock=1")
+    check("items ?low_stock=1 accepted (Laravel-style 1)", s == 200, f"got {s} {d}")
+    db_low = sql("SELECT COUNT(*) FROM items WHERE is_active=1 AND "
+                 "COALESCE(current_stock,0) <= COALESCE(min_stock_threshold,0)")
+    check("items low_stock matches SQL count", str(len(got or [])) == db_low,
+          f"api={len(got or [])} db={db_low}")
+    s, d, _ = req("GET", "/api/items?low_stock=true", token=STAFF_TOKEN, base=base)
+    check("items ?low_stock=true accepted too", s == 200, f"got {s}")
+
+    # item round trip (create -> soft delete -> hidden -> shown inactive ->
+    # activate -> visible again, low-stock filter tracks it)
+    sku, barcode = f"{MARKER}-LS", f"997{uuid.uuid4().hex[:10]}"
+    fields = {"name": f"{MARKER} LowStock", "sku": sku, "barcode": barcode,
+              "category_id": str(CREATED["categories"][0]) if CREATED["categories"] else "1",
+              "unit_price": "10000", "cost_price": "5000", "current_stock": "3",
+              "min_stock_threshold": "10", "unit_of_measure": "pcs"}
+    s, raw = post_form("/api/items", fields, STAFF_TOKEN, base=base)
+    item_id = (raw or {}).get("id") if isinstance(raw, dict) else None
+    check("low-stock item created", s in (200, 201) and item_id, f"got {s}")
+    if item_id:
+        CREATED["items"].append(item_id)
+        s, _, _ = req("DELETE", f"/api/items/{item_id}", token=STAFF_TOKEN, base=base)
+        check("item deactivate (DELETE) 2xx", s in (200, 204), f"got {s}")
+        check("inactive item hidden from default list",
+              item_id not in ids("/api/items?per_page=100"))
+        check("inactive item visible with include_inactive=1",
+              item_id in ids("/api/items?include_inactive=1"))
+        check("inactive item visible in low_stock when include_inactive=1",
+              item_id in ids("/api/items?low_stock=1&include_inactive=1"))
+        s, _, _ = req("POST", f"/api/items/{item_id}/activate", token=STAFF_TOKEN, base=base)
+        check("item activate endpoint 2xx", s in (200, 204), f"got {s}")
+        check("reactivated item back in default list",
+              item_id in ids("/api/items?per_page=100"))
+        check("reactivated low-stock item reappears in low_stock=1",
+              item_id in ids("/api/items?low_stock=1"))
+        req("DELETE", f"/api/items/{item_id}?force=1", token=STAFF_TOKEN, base=base)
+        CREATED["items"].remove(item_id)
+
+    # --- member round trip -------------------------------------------------
+    phone = f"081{uuid.uuid4().hex[:9]}"
+    s, d, _ = req("POST", "/api/members",
+                  {"name": f"{MARKER} Inactive", "phone": phone, "password": "secret123"},
+                  token=STAFF_TOKEN, base=base)
+    member_id = (d or {}).get("id") if isinstance(d, dict) else None
+    if member_id:
+        CREATED["members"].append(member_id)
+        s, _, _ = req("DELETE", f"/api/members/{member_id}", token=STAFF_TOKEN, base=base)
+        check("member deactivate 2xx", s in (200, 204), f"got {s}")
+        check("inactive member hidden from default member list",
+              member_id not in ids("/api/members"))
+        check("inactive member visible with include_inactive=1",
+              member_id in ids("/api/members?include_inactive=1"))
+        s, d, _ = req("PUT", f"/api/members/{member_id}", {"is_active": True},
+                      token=STAFF_TOKEN, base=base)
+        check("member reactivate (PUT is_active:true) 2xx", s in (200, 204), f"got {s} {d}")
+        check("reactivated member back in member list",
+              member_id in ids("/api/members"))
+
+    # --- staff users round trip -------------------------------------------
+    email = f"{MARKER.lower()}u@e2e.test"
+    s, d, _ = req("POST", "/api/users",
+                  {"name": f"{MARKER} Staff", "email": email, "password": "password",
+                   "role": "employee", "phone": f"081{uuid.uuid4().hex[:9]}"},
+                  token=STAFF_TOKEN, base=base)
+    user_id = (d or {}).get("id") if isinstance(d, dict) else None
+    if user_id:
+        CREATED["users"].append(user_id)
+        s, _, _ = req("DELETE", f"/api/users/{user_id}", token=STAFF_TOKEN, base=base)
+        check("user deactivate 2xx", s in (200, 204), f"got {s}")
+        check("inactive user hidden from /users default",
+              user_id not in ids("/api/users"))
+        check("inactive user visible with include_inactive=1",
+              user_id in ids("/api/users?include_inactive=1"))
+        got, _, _ = ids_of(f"/api/users?search={MARKER}")
+        check("users search param filters", user_id not in (got or []), f"got {got}")
+        s, _, _ = req("PUT", f"/api/users/{user_id}", {"is_active": True},
+                      token=STAFF_TOKEN, base=base)
+        check("user reactivate 2xx", s in (200, 204), f"got {s}")
+        check("reactivated user back in /users", user_id in ids("/api/users"))
+
+    # --- employee (owner view) round trip ---------------------------------
+    email = f"{MARKER.lower()}e@e2e.test"
+    s, d, _ = req("POST", "/api/employees",
+                  {"name": f"{MARKER} Employee", "email": email, "password": "password",
+                   "phone": f"081{uuid.uuid4().hex[:9]}"},
+                  token=STAFF_TOKEN, base=base)
+    emp_id = (d or {}).get("id") if isinstance(d, dict) else None
+    check("employee created via /employees", s in (200, 201) and bool(emp_id), f"got {s} {d}")
+    if emp_id:
+        CREATED["users"].append(emp_id)
+        s, _, _ = req("DELETE", f"/api/employees/{emp_id}", token=STAFF_TOKEN, base=base)
+        check("employee deactivate 2xx", s in (200, 204), f"got {s}")
+        check("inactive employee hidden from /employees default",
+              emp_id not in ids("/api/employees"))
+        check("inactive employee visible with include_inactive=1",
+              emp_id in ids("/api/employees?include_inactive=1"))
+        s, _, _ = req("PUT", f"/api/employees/{emp_id}", {"is_active": True},
+                      token=STAFF_TOKEN, base=base)
+        check("employee reactivate 2xx", s in (200, 204), f"got {s}")
+        check("reactivated employee back in /employees",
+              emp_id in ids("/api/employees"))
+
+    # --- discounts round trip (soft delete + activate endpoint) -----------
+    s, d, _ = req("POST", "/api/discounts",
+                  {"name": f"{MARKER} Disc", "discount_type": "percentage", "value": 5,
+                   "start_date": "2026-01-01", "end_date": "2035-12-31", "is_active": True},
+                  token=STAFF_TOKEN, base=base)
+    disc_id = (d or {}).get("id") if isinstance(d, dict) else None
+    check("discount created", s in (200, 201) and bool(disc_id), f"got {s} {d}")
+    if disc_id:
+        CREATED["discounts"].append(disc_id)
+        s, _, _ = req("DELETE", f"/api/discounts/{disc_id}", token=STAFF_TOKEN, base=base)
+        check("discount deactivate (DELETE) 2xx", s in (200, 204), f"got {s}")
+        check("inactive discount hidden from default list",
+              disc_id not in ids("/api/discounts"))
+        check("discount still exists after deactivate (soft, not hard)",
+              disc_id in ids("/api/discounts?include_inactive=1") or
+              req("GET", f"/api/discounts/{disc_id}", token=STAFF_TOKEN, base=base)[0] == 200)
+        s, _, _ = req("POST", f"/api/discounts/{disc_id}/activate", token=STAFF_TOKEN, base=base)
+        check("discount activate endpoint 2xx", s in (200, 204), f"got {s}")
+        check("reactivated discount back in default list",
+              disc_id in ids("/api/discounts"))
+        s, _, _ = req("PUT", f"/api/discounts/{disc_id}",
+                      {"name": f"{MARKER} Disc", "discount_type": "percentage",
+                       "value": 7, "start_date": "2026-01-01", "end_date": "2035-12-31"},
+                      token=STAFF_TOKEN, base=base)
+        check("discount PUT update 200", s == 200, f"got {s}")
+        s, d, _ = req("GET", f"/api/discounts/{disc_id}", token=STAFF_TOKEN, base=base)
+        check("discount name survives partial PUT (null-tolerant update)",
+              (d or {}).get("name") == f"{MARKER} Disc", f"name={d.get('name')}")
+
+    # --- loan products round trip -----------------------------------------
+    s, d, _ = req("POST", "/api/loan-products",
+                  {"name": f"{MARKER} Prod", "interest_rate": 1.5,
+                   "max_amount": 5_000_000, "max_duration_months": 12, "is_active": True},
+                  token=STAFF_TOKEN, base=base)
+    prod_id = (d or {}).get("id") if isinstance(d, dict) else None
+    check("loan product created", s in (200, 201) and bool(prod_id), f"got {s} {d}")
+    if prod_id:
+        CREATED["loan_products"].append(prod_id)
+        s, _, _ = req("DELETE", f"/api/loan-products/{prod_id}", token=STAFF_TOKEN, base=base)
+        check("loan product deactivate (DELETE) is soft", s in (200, 204), f"got {s}")
+        check("inactive loan product hidden from default list",
+              prod_id not in ids("/api/loan-products"))
+        check("inactive loan product visible with include_inactive=1",
+              prod_id in ids("/api/loan-products?include_inactive=1"))
+        s, _, _ = req("POST", f"/api/loan-products/{prod_id}/activate",
+                      token=STAFF_TOKEN, base=base)
+        check("loan product activate endpoint 2xx", s in (200, 204), f"got {s}")
+        check("reactivated loan product back in default list",
+              prod_id in ids("/api/loan-products"))
+        s, _, _ = req("DELETE", f"/api/loan-products/{prod_id}?force=1",
+                      token=STAFF_TOKEN, base=base)
+        check("loan product force delete 2xx", s in (200, 204), f"got {s}")
+        check("force-deleted loan product gone even with include_inactive",
+              prod_id not in ids("/api/loan-products?include_inactive=1"))
+        CREATED["loan_products"].remove(prod_id)
 
 
 def suite_checkout(base):
@@ -711,13 +890,29 @@ def cleanup(base):
     # Loans first (they reference members), then members, suppliers,
     # transactions (line items may need manual FK cleanup), items,
     # categories last.
+    for user_id in CREATED.get("users", []):
+        s, _, _ = req("DELETE", f"/api/users/{user_id}?force=1", token=STAFF_TOKEN, base=base)
+        if s in (404, 405):
+            sql_safe(f"DELETE FROM users WHERE id={user_id} AND name LIKE '{MARKER}%';")
+
+    for disc_id in CREATED.get("discounts", []):
+        s, _, _ = req("DELETE", f"/api/discounts/{disc_id}?force=1", token=STAFF_TOKEN, base=base)
+        if s in (404, 405):
+            sql_safe(f"DELETE FROM discounts WHERE id={disc_id} AND name LIKE '{MARKER}%';")
+        sql_safe(f"DELETE FROM discounts WHERE id={disc_id} AND name LIKE '{MARKER}%';")
+
+    for prod_id in CREATED.get("loan_products", []):
+        s, _, _ = req("DELETE", f"/api/loan-products/{prod_id}?force=1", token=STAFF_TOKEN, base=base)
+        if s in (404, 405):
+            sql_safe(f"DELETE FROM loan_products WHERE id={prod_id} AND name LIKE '{MARKER}%';")
+
     for loan_id in CREATED["loans"]:
         s, _, _ = req("DELETE", f"/api/owner/loans/{loan_id}", token=STAFF_TOKEN, base=base)
         if s in (404, 405):
             sql_safe(f"DELETE FROM loan_payments WHERE loan_id={loan_id}; DELETE FROM loans WHERE id={loan_id};")
 
     for member_id in CREATED["members"]:
-        s, _, _ = req("DELETE", f"/api/members/{member_id}?force=true", token=STAFF_TOKEN, base=base)
+        s, _, _ = req("DELETE", f"/api/members/{member_id}?force=1", token=STAFF_TOKEN, base=base)
         if s in (404, 405):
             sql_safe(f"DELETE FROM members WHERE id={member_id};")
         # The API only soft-deletes; purge rows this run created so the
@@ -737,7 +932,7 @@ def cleanup(base):
                  f"({','.join(txn_ids)}); DELETE FROM transactions WHERE id IN ({','.join(txn_ids)});")
 
     for item_id in CREATED["items"]:
-        s, _, _ = req("DELETE", f"/api/items/{item_id}?force=true", token=STAFF_TOKEN, base=base)
+        s, _, _ = req("DELETE", f"/api/items/{item_id}?force=1", token=STAFF_TOKEN, base=base)
         if s in (404, 405):
             req("DELETE", f"/api/items/{item_id}", token=STAFF_TOKEN, base=base)
         # FK sweep: restocking_records/transaction_items referencing e2e items
@@ -788,6 +983,7 @@ def main():
         suite_auth(args.base)
         suite_items_categories(args.base)
         suite_members(args.base)
+        suite_listing_filters(args.base)
         suite_images(args.base)
         suite_checkout(args.base)
         suite_loans(args.base)

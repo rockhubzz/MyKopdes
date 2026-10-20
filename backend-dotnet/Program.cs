@@ -15,7 +15,12 @@ using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // Accept low_stock=1 / include_inactive=1 style booleans (Laravel
+        // parity; the frontend sends numeric flags).
+        options.ModelBinderProviders.Insert(0, new MyKopdes.ModelBinding.TolerantBoolModelBinderProvider());
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = new SnakeCaseJsonNamingPolicy();

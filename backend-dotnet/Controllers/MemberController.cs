@@ -24,10 +24,11 @@ public class MemberController : ControllerBase
     public async Task<ActionResult<PaginatedResponse<MemberModel>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery(Name = "include_inactive")] bool includeInactive = false)
     {
-        var members = await _memberService.GetAllAsync(page, pageSize, search);
-        var total = await _memberService.GetTotalCountAsync(search);
+        var members = await _memberService.GetAllAsync(page, pageSize, search, !includeInactive);
+        var total = await _memberService.GetTotalCountAsync(search, !includeInactive);
         var totalPages = (int)Math.Ceiling((double)total / pageSize);
         return Ok(new PaginatedResponse<MemberModel>
         {

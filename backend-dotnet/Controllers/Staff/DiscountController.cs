@@ -21,10 +21,12 @@ public class DiscountController : ControllerBase
     [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
     public async Task<ActionResult<PaginatedResponse<Discount>>> Get(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "per_page")] int pageSize = 15)
+        [FromQuery(Name = "per_page")] int pageSize = 15,
+        [FromQuery] string? search = null,
+        [FromQuery(Name = "include_inactive")] bool includeInactive = false)
     {
-        var discounts = await _discountService.GetAllAsync(page, pageSize);
-        var total = await _discountService.GetTotalCountAsync();
+        var discounts = await _discountService.GetAllAsync(page, pageSize, search, !includeInactive);
+        var total = await _discountService.GetTotalCountAsync(search, !includeInactive);
         var totalPages = (int)Math.Ceiling((double)total / pageSize);
         return Ok(new PaginatedResponse<Discount>
         {
@@ -74,6 +76,15 @@ public class DiscountController : ControllerBase
         {
             return NotFound(new { message = "Discount not found" });
         }
+    }
+
+    [HttpPost("{id:int}/activate")]
+    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var ok = await _discountService.SetActivationAsync(id, true);
+        if (!ok) return NotFound(new { message = "Discount not found" });
+        return Ok(new { message = "Discount activated successfully" });
     }
 
     [HttpDelete("{id:int}")]
