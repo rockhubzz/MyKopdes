@@ -1,6 +1,6 @@
 # ============================================================================
 # koperasi-app — root .gitignore
-# Covers: backend (Laravel/PHP) / frontend (Next.js) / nginx / db (MySQL)
+# Covers: backend-dotnet (ASP.NET) / frontend (Next.js) / nginx / db (MySQL)
 # Rule: never commit secrets, dependencies, build output, or local data.
 # Commit the *.example templates instead.
 # ============================================================================
@@ -12,9 +12,6 @@
 .env.*
 !.env.example
 !.env.*.example
-backend/.env
-backend/.env.*
-!backend/.env.example
 frontend/.env
 frontend/.env*.local
 !frontend/.env.example
@@ -22,49 +19,17 @@ frontend/.env*.local
 *.key
 !**/*.key.example
 .auth.json
-backend/auth.json
 
 # --------------------------------------------------------------------------
-# 1. Backend — Laravel / PHP / Composer
+# 1. Backend (.NET 8) — build output is recreated by `dotnet publish` during
+#    the Docker build; only source is versioned.
 # --------------------------------------------------------------------------
-# Dependencies (rebuilt from backend/composer.lock during docker build)
-backend/vendor/
-vendor/
-# JS tooling if ever used inside backend/
-backend/node_modules/
-backend/npm-debug.log
-backend/yarn-error.log
-
-# Laravel generated / runtime artifacts (recreated by composer install / storage:link)
-backend/bootstrap/cache/*.php
-!backend/bootstrap/cache/.gitignore
-backend/public/hot
-backend/public/storage
-backend/storage/*.key
-backend/storage/logs/*.log
-backend/storage/framework/cache/data/*
-backend/storage/framework/sessions/*
-backend/storage/framework/views/*
-backend/storage/framework/testing/*
-backend/storage/app/backups/*
-backend/storage/app/public/*
-# Keep placeholder files so empty dirs survive a fresh clone
-!backend/storage/**/logs/.gitkeep
-!backend/storage/**/framework/**/data/.gitkeep
-!backend/storage/**/framework/**/sessions/.gitkeep
-!backend/storage/**/framework/**/views/.gitkeep
-!backend/storage/**/app/**/backups/.gitkeep
-!backend/storage/**/app/**/public/.gitkeep
-
-# Laravel / PHP test & dev artifacts
-backend/.phpunit.cache/
-backend/.phpunit.result.cache
-.phpunit.cache/
-.phpunit.result.cache
-backend/Homestead.json
-backend/Homestead.yaml
-Homestead.json
-Homestead.yaml
+backend-dotnet/bin/
+backend-dotnet/obj/
+backend-dotnet/publish/
+backend-dotnet/backups/
+backend-dotnet/.vs/
+backend-dotnet/artifacts/
 
 # --------------------------------------------------------------------------
 # 2. Frontend — Next.js / Node
@@ -144,6 +109,8 @@ dump.rdb
 *.sqlite
 *.sqlite3
 *.db
+# The committed schema + demo seed IS the seeder — never ignore it.
+!mysql/init/*.sql
 
 # --------------------------------------------------------------------------
 # 5. Docker / Compose local overrides
@@ -189,24 +156,11 @@ $RECYCLE.BIN/
 .vscode/*
 !.vscode/extensions.json
 *.code-workspace
-*.sublime-project
-*.sublime-workspace
-*.swp
-*.swo
+.sublime-project
+.sublime-workspace
 .project
 .classpath
 .settings/
 *.iml
 nbproject/
 netbeans/
-
-# --------------------------------------------------------------------------
-# 8. Backend (.NET 8) - build output is recreated by dotnet publish during
-#    the Docker build; only source is versioned.
-# --------------------------------------------------------------------------
-backend-dotnet/bin/
-backend-dotnet/obj/
-backend-dotnet/publish/
-backend-dotnet/backups/
-backend-dotnet/.vs/
-backend-dotnet/artifacts/
