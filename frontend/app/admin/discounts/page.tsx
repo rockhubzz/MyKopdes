@@ -20,6 +20,7 @@ export default function DiscountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const { t, tx } = useLanguage();
 
   function openCreate() {
@@ -73,7 +74,7 @@ export default function DiscountsPage() {
 
   async function handleActivate(d: Discount) {
     if (!confirm(t('discounts.activateConfirm', { name: d.name }))) return;
-    await apiFetch(`/discounts/${d.id}`, { method: 'PUT', body: { is_active: true } });
+    await apiFetch(`/discounts/${d.id}/activate`, { method: 'POST' });
     setReloadKey((k) => k + 1);
   }
 
@@ -114,7 +115,8 @@ export default function DiscountsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-koperasi-800">{t('discounts.title')}</h1>
-        <button className="btn-primary" onClick={openCreate}>
+        <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />{t('discounts.showInactive')}</label>
+          <button className="btn-primary" onClick={openCreate}>
           {t('discounts.newDiscount')}
         </button>
       </div>
@@ -144,6 +146,7 @@ export default function DiscountsPage() {
             </button>
           </div>
         )}
+        extraParams={`${showInactive ? '&include_inactive=1' : ''}`}
       />
 
       {showForm && (

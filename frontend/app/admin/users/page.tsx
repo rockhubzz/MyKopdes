@@ -16,6 +16,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const { t, tx } = useLanguage();
 
   function openCreate() {
@@ -97,7 +98,8 @@ export default function UsersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-koperasi-800">{t('users.title')}</h1>
-        <button className="btn-primary" onClick={openCreate}>
+        <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />{t('users.showInactive')}</label>
+          <button className="btn-primary" onClick={openCreate}>
           {t('users.addStaff')}
         </button>
       </div>
@@ -127,6 +129,7 @@ export default function UsersPage() {
             </button>
           </div>
         )}
+        extraParams={`${showInactive ? '&include_inactive=1' : ''}`}
       />
 
       {showForm && (

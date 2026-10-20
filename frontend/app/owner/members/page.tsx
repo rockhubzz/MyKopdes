@@ -17,6 +17,7 @@ export default function MembersPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [created, setCreated] = useState<Member | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const { t } = useLanguage();
 
   function openCreate() {
@@ -95,7 +96,8 @@ export default function MembersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-koperasi-800">{t('members.title')}</h1>
-        <button className="btn-primary" onClick={openCreate}>
+        <label className="text-sm flex items-center gap-1"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />{t('members.showInactive')}</label>
+          <button className="btn-primary" onClick={openCreate}>
           {t('members.enrollMember')}
         </button>
       </div>
@@ -125,6 +127,7 @@ export default function MembersPage() {
             </button>
           </div>
         )}
+        extraParams={`${showInactive ? '&include_inactive=1' : ''}`}
       />
 
       {showForm && (
