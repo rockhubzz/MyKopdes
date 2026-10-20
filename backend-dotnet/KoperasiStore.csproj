@@ -4,7 +4,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- 1591: missing XML comment warnings — endpoint comments are added
+         progressively, don't fail the build because of them. -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
     <InvariantGlobalization>true</InvariantGlobalization>
     <RootNamespace>MyKopdes</RootNamespace>
   </PropertyGroup>

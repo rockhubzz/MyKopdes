@@ -22,7 +22,55 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "MyKopdes API",
+        Version = "v1",
+        Description = "Koperasi store management API — auth, items, members, transactions, loans, reports. " +
+                      "Staff endpoints accept a JWT from POST /api/auth/staff/login; member endpoints one from POST /api/auth/member/login."
+    });
+
+    // Use the full type name for schema ids so two DTOs with the same simple
+    // name in different namespaces can never collide (that 500s the doc).
+    options.CustomSchemaIds(t => t.FullName!.Replace("+", "."));
+
+    // JWT bearer: adds the Authorize button on locked endpoints so they can
+    // be tried straight from Swagger UI.
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Paste the token from /api/auth/staff/login or /api/auth/member/login (no 'Bearer ' prefix needed)."
+    });
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+
+    // Pick up /// comments from controllers/models into the UI.
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
+});
+
 
 // Compress JSON responses (gzip) — smaller payloads means faster tables and
 // dashboards on the client. Nginx proxies them through transparently.
@@ -115,11 +163,15 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 // The TLS termination happens at the nginx container, so no HTTPS redirect
 // here (UseHttpsRedirection is a no-op behind the proxy anyway).
-if (app.Environment.IsDevelopment())
+// Swagger UI is served in Production as well (the deployment is an internal
+// docker network) so the API can be explored/tested live; to restrict it,
+// gate these two lines on app.Environment.IsDevelopment().
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "MyKopdes API v1");
+    options.DocumentTitle = "MyKopdes API Docs";
+});
 
 // Behind nginx: trust X-Forwarded-For/Proto so logs and audit entries carry
 // the real client IP instead of nginx's container IP.

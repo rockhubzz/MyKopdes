@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using MyKopdes.Models;
 using MyKopdes.Models.DTOs;
 using MyKopdes.Services;
+using SettingUpdateRequest = MyKopdes.Controllers.Staff.SettingUpdateRequest;
 
 namespace MyKopdes.Controllers;
 
@@ -94,7 +95,6 @@ public class LoanProductController : ControllerBase
     }
 }
 
-public class SettingUpdateRequest
-{
-    public string Value { get; set; } = null!;
-}
+// NOTE: no local SettingUpdateRequest class here — this controller reuses the
+// one defined in Controllers.Staff. Two same-named DTOs in different
+// namespaces collide on Swagger schema ids and 500 the swagger.json doc.

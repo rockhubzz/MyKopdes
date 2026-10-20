@@ -26,6 +26,11 @@ public class TransactionController : ControllerBase
         _cache = cache;
     }
 
+    /// <summary>List transactions, newest first, paginated. Search matches transaction code, member name, or cashier name.</summary>
+    /// <param name="page">1-based page number.</param>
+    /// <param name="pageSize">Rows per page (per_page).</param>
+    /// <param name="search">Optional text filter on code/member/cashier.</param>
+    /// <param name="paymentMethod">Optional exact payment method filter (e.g. cash, qr).</param>
     [HttpGet]
     [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
     public async Task<ActionResult<PaginatedResponse<Transaction>>> Get(
@@ -47,11 +52,40 @@ public class TransactionController : ControllerBase
         });
     }
 
+    /// <summary>Fetch one transaction with its line items, member, and cashier.</summary>
     [HttpGet("{id:int}")]
     [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
     public async Task<ActionResult<Transaction>> GetById(int id)
     {
         var transaction = await _transactionService.GetByIdAsync(id);
+        if (transaction == null) return NotFound(new { message = "Transaction not found" });
+        return Ok(transaction);
+    }
+
+    /// <summary>
+    /// Live price preview for the cashier: server-side discount and tax math
+    /// without committing a sale. Body: items [{item_id, quantity}] plus an
+    /// optional member_identifier and discount_id.
+    /// </summary>
+    [HttpPost("preview")]
+    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    public async Task<ActionResult<object>> Preview([FromBody] CheckoutRequest request)
+    {
+        return Ok(await BuildCheckoutResult(request, commit: false));
+    }
+
+    /// <summary>
+    /// Commit a sale: resolves the member and discount, applies tax,
+    /// writes the transaction + line items in one DB transaction, deducts
+    /// stock, and returns the receipt-ready transaction.
+    /// </summary>
+    [HttpPost("checkout")]
+    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    public async Task<ActionResult<Transaction>> Checkout([FromBody] CheckoutRequest request)
+    {
+        var result = await BuildCheckoutResult(request, commit: true);
+        if (result.TransactionId == null) return BadRequest(new { message = "Checkout failed" });
+        var transaction = await _transactionService.GetByIdAsync(result.TransactionId.Value);
         if (transaction == null) return NotFound(new { message = "Transaction not found" });
         return Ok(transaction);
     }
@@ -124,24 +158,6 @@ public class TransactionController : ControllerBase
         });
 
         return Ok(new { message = "Transaction voided successfully" });
-    }
-
-    [HttpPost("preview")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
-    public async Task<ActionResult<object>> Preview([FromBody] CheckoutRequest request)
-    {
-        return Ok(await BuildCheckoutResult(request, commit: false));
-    }
-
-    [HttpPost("checkout")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
-    public async Task<ActionResult<Transaction>> Checkout([FromBody] CheckoutRequest request)
-    {
-        var result = await BuildCheckoutResult(request, commit: true);
-        if (result.TransactionId == null) return BadRequest(new { message = "Checkout failed" });
-        var transaction = await _transactionService.GetByIdAsync(result.TransactionId.Value);
-        if (transaction == null) return NotFound(new { message = "Transaction not found" });
-        return Ok(transaction);
     }
 
     private async Task<CheckoutResult> BuildCheckoutResult(CheckoutRequest request, bool commit)
