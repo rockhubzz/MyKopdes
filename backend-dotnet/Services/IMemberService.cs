@@ -1,0 +1,18 @@
+using MyKopdes.Models;
+
+namespace MyKopdes.Services;
+
+public interface IMemberService
+{
+    Task<List<Member>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null);
+    Task<Member?> GetByIdAsync(int id);
+    Task<Member?> GetByIdentifierAsync(string identifier);
+    Task<Member> CreateAsync(Member member);
+    Task<Member> UpdateAsync(int id, Member member);
+    Task<bool> DeleteAsync(int id, bool force = false);
+    Task<List<Member>> SearchAsync(string query);
+    Task<int> GetTotalCountAsync(string? search = null);
+    Task<Member?> GetByMemberIdAsync(int memberId);
+    Task<Member> UpdateBalanceAsync(int memberId, decimal amount);
+    Task SetMemberPinAsync(int memberId, string pinHash);
+}

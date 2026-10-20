@@ -1,0 +1,58 @@
+namespace MyKopdes.Models;
+
+// Maps to MySQL table `loans`
+public class Loan
+{
+    public int Id { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("loan_code")]
+    public string LoanCode { get; set; } = null!;  // loan_code
+    [System.Text.Json.Serialization.JsonPropertyName("member_id")]
+    public int MemberId { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Member Member { get; set; } = null!;
+    [System.Text.Json.Serialization.JsonPropertyName("loan_product_id")]
+    public int LoanProductId { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public LoanProduct LoanProduct { get; set; } = null!;
+    [System.Text.Json.Serialization.JsonPropertyName("product")]
+    public LoanProduct Product => LoanProduct;
+    [System.Text.Json.Serialization.JsonPropertyName("approved_by")]
+    public int? UserId { get; set; }              // approved_by
+    [System.Text.Json.Serialization.JsonIgnore]
+    public User? User { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("principal")]
+    public decimal? PrincipalAmount { get; set; }  // principal
+    [System.Text.Json.Serialization.JsonPropertyName("interest_rate")]
+    public decimal? InterestRate { get; set; }     // interest_rate
+    public string InterestPeriod { get; set; } = "monthly";  // interest_period
+    [System.Text.Json.Serialization.JsonPropertyName("term_months")]
+    public int TermInMonths { get; set; }          // term_months
+    public decimal? MonthlyPayment { get; set; }   // computed/virtual
+    [System.Text.Json.Serialization.JsonPropertyName("processing_fee")]
+    public decimal? ProcessingFee { get; set; }    // processing_fee
+    [System.Text.Json.Serialization.JsonPropertyName("outstanding_balance")]
+    public decimal? TotalAmount { get; set; }      // outstanding_balance
+    [System.Text.Json.Serialization.JsonPropertyName("accrued_interest")]
+    public decimal? InterestAmount { get; set; }    // accrued_interest
+    [System.Text.Json.Serialization.JsonPropertyName("total_paid")]
+    public decimal? PaidAmount { get; set; }       // total_paid
+    public decimal? RemainingAmount { get; set; }  // computed/virtual, not a DB column
+    [System.Text.Json.Serialization.JsonPropertyName("applied_at")]
+    public DateTime? LoanDate { get; set; }        // applied_at
+    [System.Text.Json.Serialization.JsonPropertyName("approved_at")]
+    public DateTime? ApprovedAt { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("first_due_at")]
+    public DateTime? FirstDueAt { get; set; }      // first_due_at
+    [System.Text.Json.Serialization.JsonPropertyName("due_at")]
+    public DateTime? DueDate { get; set; }         // due_at
+    [System.Text.Json.Serialization.JsonPropertyName("paid_off_at")]
+    public DateTime? PaidAt { get; set; }          // paid_off_at
+    public string Status { get; set; } = "pending";
+    public string? Notes { get; set; }
+    public DateTime? CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+
+    // Navigation properties
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<LoanPayment> Payments { get; set; } = new();
+}

@@ -30,7 +30,6 @@ backend/auth.json
 # Dependencies (rebuilt from backend/composer.lock during docker build)
 backend/vendor/
 vendor/
-
 # JS tooling if ever used inside backend/
 backend/node_modules/
 backend/npm-debug.log
@@ -200,3 +199,14 @@ $RECYCLE.BIN/
 *.iml
 nbproject/
 netbeans/
+
+# --------------------------------------------------------------------------
+# 8. Backend (.NET 8) - build output is recreated by dotnet publish during
+#    the Docker build; only source is versioned.
+# --------------------------------------------------------------------------
+backend-dotnet/bin/
+backend-dotnet/obj/
+backend-dotnet/publish/
+backend-dotnet/backups/
+backend-dotnet/.vs/
+backend-dotnet/artifacts/

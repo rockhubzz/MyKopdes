@@ -1,0 +1,150 @@
+using Microsoft.EntityFrameworkCore;
+using MyKopdes.Data;
+using MyKopdes.Models;
+
+namespace MyKopdes.Services;
+
+public class DiscountService : IDiscountService
+{
+    private readonly KoperasiDbContext _context;
+
+    public DiscountService(KoperasiDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15)
+    {
+        return await _context.Discounts
+            .Include(d => d.Category)
+            .OrderByDescending(d => d.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+    }
+
+    public async Task<int> GetTotalCountAsync()
+    {
+        return await _context.Discounts.CountAsync();
+    }
+
+    public async Task<Discount?> GetByIdAsync(int id)
+    {
+        return await _context.Discounts
+            .Include(d => d.Category)
+            .FirstOrDefaultAsync(d => d.Id == id);
+    }
+
+    public async Task<Discount> CreateAsync(Discount discount)
+    {
+        discount.CreatedAt = DateTime.UtcNow;
+        discount.UpdatedAt = DateTime.UtcNow;
+        _context.Discounts.Add(discount);
+        await _context.SaveChangesAsync();
+        return discount;
+    }
+
+    public async Task<Discount> UpdateAsync(int id, Discount discount)
+    {
+        var existing = await _context.Discounts.FindAsync(id);
+        if (existing == null) throw new KeyNotFoundException("Discount not found");
+
+        existing.Name = discount.Name;
+        existing.Description = discount.Description;
+        existing.ItemId = discount.ItemId;
+        existing.CategoryId = discount.CategoryId;
+        existing.MemberId = discount.MemberId;
+        existing.DiscountRate = discount.DiscountRate;
+        existing.DiscountAmount = discount.DiscountAmount;
+        existing.Type = discount.Type;
+        existing.StartDate = discount.StartDate;
+        existing.EndDate = discount.EndDate;
+        existing.IsActive = discount.IsActive;
+        existing.Scope = discount.Scope;
+        existing.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<bool> DeleteAsync(int id, bool force = false)
+    {
+        var discount = await _context.Discounts.FindAsync(id);
+        if (discount == null) return false;
+        _context.Discounts.Remove(discount);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<Discount>> GetActiveAsync(bool has_member = false)
+    {
+        var now = DateTime.UtcNow;
+        var query = _context.Discounts
+            .Include(d => d.Category)
+            .Where(d => d.IsActive &&
+                (d.StartDate == null || d.StartDate <= now) &&
+                (d.EndDate == null || d.EndDate >= now));
+
+        if (has_member)
+            query = query.Where(d => d.Scope == "member");
+        else
+            query = query.Where(d => d.Scope != "member");
+
+        return await query.ToListAsync();
+    }
+
+    public async Task<List<Discount>> GetActiveDiscountsAsync(int? memberId = null, int? itemId = null, int? categoryId = null)
+    {
+        var now = DateTime.UtcNow;
+        var query = _context.Discounts
+            .Where(d => d.IsActive &&
+                (d.StartDate == null || d.StartDate <= now) &&
+                (d.EndDate == null || d.EndDate >= now));
+
+        if (memberId.HasValue)
+            query = query.Where(d => d.Scope == "member" || d.Scope == "general");
+
+        if (itemId.HasValue)
+            query = query.Where(d => d.ItemId == itemId.Value || d.ItemId == null);
+
+        if (categoryId.HasValue)
+            query = query.Where(d => d.CategoryId == categoryId.Value || d.CategoryId == null);
+
+        return await query.ToListAsync();
+    }
+
+    public async Task<decimal> CalculateDiscountAsync(int? memberId, int? itemId, decimal subtotal)
+    {
+        var now = DateTime.UtcNow;
+        var discounts = await _context.Discounts
+            .Where(d => d.IsActive &&
+                (d.StartDate == null || d.StartDate <= now) &&
+                (d.EndDate == null || d.EndDate >= now))
+            .ToListAsync();
+
+        decimal totalDiscount = 0;
+
+        foreach (var discount in discounts)
+        {
+            // Check scope match
+            bool scopeMatch = discount.Scope == "general" ||
+                (discount.Scope == "member" && memberId.HasValue) ||
+                (discount.ItemId == itemId && discount.Scope == "item") ||
+                (discount.Scope == "category" && discount.ItemId == null) ||
+                discount.MemberId == null && discount.ItemId == null && discount.CategoryId == null;
+
+            if (!scopeMatch) continue;
+
+            if (discount.Type == "percentage")
+            {
+                totalDiscount += subtotal * (discount.DiscountRate / 100);
+            }
+            else if (discount.Type == "fixed")
+            {
+                totalDiscount += discount.DiscountAmount ?? 0;
+            }
+        }
+
+        return Math.Min(totalDiscount, subtotal);
+    }
+}
