@@ -3,7 +3,11 @@
 # managed load balancer / certbot sidecar at this compose file).
 #
 # Usage:
+#   bash scripts/setup.sh --file .env.production     # conf + generated secrets
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# (MySQL here has NO published host port at all — it is only reachable from
+# containers on the internal koperasi_net network.)
 #
 # The MySQL container auto-creates the database and loads the demo schema +
 # seed data on the FIRST boot (empty volume) from ./mysql/init. Reset a used

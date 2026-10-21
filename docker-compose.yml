@@ -1,5 +1,6 @@
 # Local development stack.
-# First run:  cp .env.example .env   (then edit values)
+# First run:  bash scripts/setup.sh   (writes .env + frontend/.env with the
+#                                     database / backend / frontend secrets)
 #             docker compose up -d --build
 #
 # The MySQL container auto-creates the database and loads the demo schema +
@@ -32,7 +33,10 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-koperasi_secret}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret}
     ports:
-      - "${DB_FORWARD_PORT:-3306}:3306"
+      # DB_FORWARD_HOST: empty = bind all interfaces; "127.0.0.1:" = only the
+      # host loopback (MySQL stays unreachable from other machines, which is
+      # the safer default produced by scripts/setup.sh).
+      - "${DB_FORWARD_HOST:-}${DB_FORWARD_PORT:-3306}:3306"
     # Auto-seed: runs on the first boot of an EMPTY data volume only.
     # The seed file matches the schema this stack actually runs on
     # (users/members/items/transactions/... plus loans) and the demo data.

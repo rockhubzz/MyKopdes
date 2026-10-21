@@ -40,13 +40,12 @@ all run inside containers.
 ```bash
 git clone <this-repo> koperasi-app && cd koperasi-app
 
-# 1. Root env (Docker Compose variables)
-cp .env.example .env
+# 1. Walk the setup wizard — it asks for the database / backend / frontend
+#    connection secrets (blank answers get strong generated values) and
+#    writes .env + frontend/.env.
+bash scripts/setup.sh
 
-# 2. Frontend env
-cp frontend/.env.example frontend/.env
-
-# 3. Build and start everything — the database is created and seeded
+# 2. Build and start everything — the database is created and seeded
 #    automatically on the first boot (empty volume).
 docker compose up -d --build
 ```
@@ -68,6 +67,10 @@ Notes:
 - Opening the app from another machine on the LAN? The frontend calls the
   API same-origin (`NEXT_PUBLIC_API_BASE_URL=/api` through Nginx), so
   `http://<server-ip>` just works — no per-client URL to configure.
+- Re-running the wizard later regenerates secrets into the same `.env`
+  (the old one is kept as `.env.bak.<stamp>`). MySQL only applies
+  credentials on the first boot of an empty volume — after changing
+  DB_PASSWORD on an initialized DB, wipe + reseed with the reset script.
 
 ---
 
