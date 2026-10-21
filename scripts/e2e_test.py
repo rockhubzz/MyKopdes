@@ -853,7 +853,8 @@ def suite_reports(base):
     check("owner login for reports", bool(owner_token), f"got {s}")
     if owner_token:
         for ep in ("/api/reports/summary", "/api/reports/stock-valuation",
-                   "/api/reports/best-sellers", "/api/dashboard/summary",
+                   "/api/reports/best-sellers", "/api/reports/loan-report",
+                   "/api/dashboard/summary", "/api/dashboard/loan-report?from=2026-01-01&to=2026-12-31",
                    "/api/reports/transactions/export?format=csv"):
             s2, _, _ = req("GET", ep, token=owner_token, base=base)
             check(f"shop_owner may GET {ep.split('?')[0].split('/api/')[1]}", s2 == 200, f"got {s2}")
@@ -863,6 +864,34 @@ def suite_reports(base):
     if kasir_token:
         s2, _, _ = req("GET", "/api/reports/summary", token=kasir_token, base=base)
         check("employee forbidden on /reports/summary", s2 == 403, f"got {s2}")
+        s2, _, _ = req("GET", "/api/reports/loan-report", token=kasir_token, base=base)
+        check("employee forbidden on /reports/loan-report", s2 == 403, f"got {s2}")
+
+    # Loan report math must match raw SQL and rows must carry member/product
+    # details (the seeded loans live in the last 30 days).
+    s, d, _ = req("GET", "/api/reports/loan-report", token=STAFF_TOKEN, base=base)
+    db_principal = sql("SELECT ROUND(SUM(COALESCE(principal,0)),2) FROM loans")
+    db_paid = sql("SELECT ROUND(SUM(COALESCE(total_paid,0)),2) FROM loans")
+    db_prefix = sql("SELECT id FROM members WHERE name LIKE 'Budi%' LIMIT 1")
+    check("loan report principal matches SQL", api_val is not None and
+          abs(float((d or {}).get("total_principal") or 0) - float(db_principal)) < 1.00,
+          f"api={(d or {}).get('total_principal')} db={db_principal}")
+    check("loan report paid matches SQL",
+          abs(float((d or {}).get("total_paid") or 0) - float(db_paid)) < 1.00,
+          f"api={(d or {}).get('total_paid')} db={db_paid}")
+    rows = (d or {}).get("loans") or []
+    if rows:
+        r0 = rows[0]
+        check("loan report row has member/product details",
+              "member_name" in r0 and "product_name" in r0 and "remaining_amount" in r0,
+              f"keys={sorted(r0.keys())}")
+        check("loan report remaining is computed (not 0 for active loans)",
+              all(float(r["remaining_amount"]) >= 0 for r in rows) and
+              any(float(r["remaining_amount"]) > 0 for r in rows if r["status"] != "paid_off"),
+              f"sample={[(r['loan_code'], r['remaining_amount'], r['status']) for r in rows[:3]]}")
+    check("loan report by_status covers rows",
+          (d or {}).get("total_loans") == sum(((d or {}).get("by_status") or {}).values()),
+          f"total={(d or {}).get('total_loans')} status={(d or {}).get('by_status')}")
 
     # Summary math: revenue from transactions.total_amount, and COGS must be
     # the items' cost-based sum (the old formula summed the SALE price).

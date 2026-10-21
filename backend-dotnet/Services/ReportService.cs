@@ -188,13 +188,18 @@ public class ReportService : IReportService
             .Where(l => l.CreatedAt >= from && l.CreatedAt <= to)
             .ToListAsync();
 
+        // RemainingAmount is EF-ignored (computed, never loaded from DB) —
+        // derive it from principal/interest minus payments.
+        static decimal remainingOf(Loan l) =>
+            Math.Max((l.TotalAmount ?? ((l.PrincipalAmount ?? 0) + (l.InterestAmount ?? 0))) - (l.PaidAmount ?? 0), 0);
+
         return new Dictionary<string, object>
         {
             ["total_loans"] = loans.Count,
             ["total_principal"] = loans.Sum(l => (decimal)(l.PrincipalAmount ?? 0)),
             ["total_interest"] = loans.Sum(l => (decimal)(l.InterestAmount ?? 0)),
             ["total_paid"] = loans.Sum(l => (decimal)(l.PaidAmount ?? 0)),
-            ["total_remaining"] = loans.Sum(l => (decimal)(l.RemainingAmount ?? 0)),
+            ["total_remaining"] = loans.Sum(remainingOf),
             ["by_status"] = loans.GroupBy(l => l.Status)
                 .ToDictionary(g => g.Key, g => g.Count()),
             ["loans"] = loans

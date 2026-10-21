@@ -43,27 +43,29 @@ public class ReportsController : ControllerBase
     public async Task<ActionResult<object>> GetSummary([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         from ??= DateTime.UtcNow.AddDays(-30);
-        to ??= DateTime.UtcNow;
+        // The page sends date-only values (YYYY-MM-DD); treat `to` as an
+        // inclusive day so rows from that whole day are counted.
+        var toExclusive = (to ?? DateTime.UtcNow).Date.AddDays(1);
 
         var revenue = await _context.Transactions
-            .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
+            .Where(t => t.CreatedAt >= from && t.CreatedAt < toExclusive)
             .SumAsync(t => (decimal)(t.TotalAmount ?? 0));
 
         var cost = await _context.Transactions
-            .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
+            .Where(t => t.CreatedAt >= from && t.CreatedAt < toExclusive)
             .SelectMany(t => t.Items!)
             .SumAsync(ti => (ti.Item != null ? (ti.Item.Cost ?? 0) : 0m) * ti.Quantity);
 
         var transactionCount = await _context.Transactions
-            .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
+            .Where(t => t.CreatedAt >= from && t.CreatedAt < toExclusive)
             .CountAsync();
 
         var discountGiven = await _context.Transactions
-            .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
+            .Where(t => t.CreatedAt >= from && t.CreatedAt < toExclusive)
             .SumAsync(t => (decimal)(t.DiscountAmount ?? 0));
 
         var taxCollected = await _context.Transactions
-            .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
+            .Where(t => t.CreatedAt >= from && t.CreatedAt < toExclusive)
             .SumAsync(t => (decimal)(t.TaxAmount ?? 0));
 
         var profit = revenue - cost;
@@ -88,11 +90,11 @@ public class ReportsController : ControllerBase
     public async Task<ActionResult<IEnumerable<object>>> GetBestSellers([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         from ??= DateTime.UtcNow.AddDays(-30);
-        to ??= DateTime.UtcNow;
+        var toExclusive = (to ?? DateTime.UtcNow).Date.AddDays(1);
 
         var bestSellers = await _context.TransactionItems
             .Include(ti => ti.Item)
-            .Where(ti => ti.CreatedAt >= from && ti.CreatedAt <= to)
+            .Where(ti => ti.CreatedAt >= from && ti.CreatedAt < toExclusive)
             .GroupBy(ti => ti.Item != null ? ti.Item.Code : "unknown")
             .Select(g => new
             {
@@ -113,14 +115,14 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> ExportTransactions([FromQuery] string format = "csv", [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         from ??= DateTime.UtcNow.AddDays(-30);
-        to ??= DateTime.UtcNow;
+        var toExclusive = (to ?? DateTime.UtcNow).Date.AddDays(1);
 
         var transactions = await _context.Transactions
             .Include(t => t.Member)
             .Include(t => t.User)
             .Include(t => t.Items)
             .ThenInclude(ti => ti.Item)
-            .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
+            .Where(t => t.CreatedAt >= from && t.CreatedAt < toExclusive)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync();
 
@@ -154,5 +156,65 @@ public class ReportsController : ControllerBase
         var bytes2 = System.Text.Encoding.UTF8.GetBytes(csv2.ToString());
         var contentType = format == "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf";
         return File(bytes2, contentType, $"transactions_{from:yyyy-MM-dd}_{to:yyyy-MM-dd}.{format}");
+    }
+
+    [HttpGet("loan-report")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
+    public async Task<ActionResult<object>> GetLoanReport([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    {
+        from ??= DateTime.UtcNow.AddDays(-30);
+        var toExclusive = (to ?? DateTime.UtcNow).Date.AddDays(1);
+        var now = DateTime.UtcNow;
+
+        var loans = await _context.Loans
+            .AsNoTracking()
+            .Include(l => l.Member)
+            .Include(l => l.LoanProduct)
+            .Where(l => l.CreatedAt >= from && l.CreatedAt < toExclusive)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+
+        // RemainingAmount is EF-ignored (computed, not a DB column), so it is
+        // derived here rather than trusting the property.
+        decimal outstandingOf(Loan l) =>
+            Math.Max((l.TotalAmount ?? ((l.PrincipalAmount ?? 0) + (l.InterestAmount ?? 0))) - (l.PaidAmount ?? 0), 0);
+
+        var byStatus = loans
+            .GroupBy(l => l.Status ?? "unknown")
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        return Ok(new
+        {
+            total_loans = loans.Count,
+            total_principal = loans.Sum(l => l.PrincipalAmount ?? 0),
+            total_interest = loans.Sum(l => l.InterestAmount ?? 0),
+            total_paid = loans.Sum(l => l.PaidAmount ?? 0),
+            total_outstanding = loans.Sum(outstandingOf),
+            overdue_count = loans.Count(l => l.Status == "active" && l.DueDate.HasValue && l.DueDate.Value < now),
+            active_count = loans.Count(l => l.Status == "active"),
+            pending_count = loans.Count(l => l.Status == "pending"),
+            paid_off_count = loans.Count(l => l.Status == "paid_off"),
+            by_status = byStatus,
+            loans = loans.Select(l => new
+            {
+                id = l.Id,
+                loan_code = l.LoanCode,
+                member_id = l.MemberId,
+                member_name = l.Member != null ? l.Member.Name : null,
+                membership_id = l.Member != null ? l.Member.Identifier : null,
+                product_name = l.LoanProduct != null ? l.LoanProduct.Name : null,
+                principal = l.PrincipalAmount ?? 0,
+                accrued_interest = l.InterestAmount ?? 0,
+                interest_rate = l.InterestRate,
+                term_months = l.TermInMonths,
+                total_amount = l.TotalAmount ?? ((l.PrincipalAmount ?? 0) + (l.InterestAmount ?? 0)),
+                total_paid = l.PaidAmount ?? 0,
+                remaining_amount = outstandingOf(l),
+                status = l.Status,
+                applied_at = l.LoanDate,
+                due_at = l.DueDate,
+                paid_off_at = l.PaidAt
+            })
+        });
     }
 }
