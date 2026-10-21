@@ -17,7 +17,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Dictionary<string, string>>> Get()
     {
         var settings = await _settingsService.GetAllAsync();
@@ -32,7 +32,7 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPut("{key}")]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Setting>> Update(string key, [FromBody] SettingUpdateRequest request)
     {
         var setting = await _settingsService.UpdateOrCreateAsync(key, request.Value, request.Group);

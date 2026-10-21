@@ -20,7 +20,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<PaginatedResponse<MemberModel>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -41,7 +41,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<MemberModel>> GetById(int id)
     {
         var member = await _memberService.GetByIdAsync(id);
@@ -50,7 +50,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<MemberModel>> Create([FromBody] MemberCreateRequest request)
     {
         var member = new MemberModel
@@ -72,7 +72,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<MemberModel>> Update(int id, [FromBody] MemberUpdateRequest request)
     {
         try
@@ -98,7 +98,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
         var success = await _memberService.DeleteAsync(id, force != 0);
@@ -107,7 +107,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet("search/{query}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<IEnumerable<MemberModel>>> Search(string query)
     {
         var members = await _memberService.SearchAsync(query);
@@ -115,7 +115,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet("count")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<object>> GetCount()
     {
         var count = await _memberService.GetTotalCountAsync();

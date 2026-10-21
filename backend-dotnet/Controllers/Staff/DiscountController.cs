@@ -18,7 +18,7 @@ public class DiscountController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<PaginatedResponse<Discount>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -39,7 +39,7 @@ public class DiscountController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Discount>> GetById(int id)
     {
         var discount = await _discountService.GetByIdAsync(id);
@@ -56,7 +56,7 @@ public class DiscountController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Discount>> Create([FromBody] Discount discount)
     {
         var created = await _discountService.CreateAsync(discount);
@@ -64,7 +64,7 @@ public class DiscountController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Discount>> Update(int id, [FromBody] Discount discount)
     {
         try
@@ -79,7 +79,7 @@ public class DiscountController : ControllerBase
     }
 
     [HttpPost("{id:int}/activate")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Activate(int id)
     {
         var ok = await _discountService.SetActivationAsync(id, true);
@@ -88,7 +88,7 @@ public class DiscountController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
         var success = await _discountService.DeleteAsync(id, force != 0);

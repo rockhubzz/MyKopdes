@@ -19,7 +19,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<PaginatedResponse<LoanProduct>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -40,7 +40,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<LoanProduct>> GetById(int id)
     {
         var product = await _loanProductService.GetByIdAsync(id);
@@ -49,7 +49,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<LoanProduct>> Create([FromBody] LoanProduct product)
     {
         var created = await _loanProductService.CreateAsync(product);
@@ -57,7 +57,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<LoanProduct>> Update(int id, [FromBody] LoanProduct product)
     {
         try
@@ -72,7 +72,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpPost("{id:int}/activate")]
-    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<IActionResult> Activate(int id)
     {
         var ok = await _loanProductService.SetActivationAsync(id, true);
@@ -81,7 +81,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
         var success = await _loanProductService.DeleteAsync(id, force != 0);
@@ -90,7 +90,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpGet("settings")]
-    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<IEnumerable<LoanSetting>>> GetSettings()
     {
         var settings = await _loanProductService.GetSettingsAsync();
@@ -98,7 +98,7 @@ public class LoanProductController : ControllerBase
     }
 
     [HttpPut("settings/{key}")]
-    [Authorize(Roles = "admin,owner,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<LoanSetting>> UpdateSetting(string key, [FromBody] SettingUpdateRequest request)
     {
         var setting = await _loanProductService.UpdateSettingAsync(key, request.Value);

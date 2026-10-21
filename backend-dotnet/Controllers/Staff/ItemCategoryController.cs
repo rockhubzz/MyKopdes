@@ -22,7 +22,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<PaginatedResponse<ItemCategory>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -42,7 +42,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<ItemCategory>> GetById(int id)
     {
         var category = await _categoryService.GetByIdAsync(id);
@@ -51,7 +51,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<ItemCategory>> Create([FromBody] ItemCategory category)
     {
         var existing = await _context.ItemCategories.FirstOrDefaultAsync(c => c.Name == category.Name);
@@ -61,7 +61,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<ItemCategory>> Update(int id, [FromBody] ItemCategory category)
     {
         try
@@ -76,7 +76,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Delete(int id)
     {
         try

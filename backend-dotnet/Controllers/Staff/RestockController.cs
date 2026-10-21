@@ -17,7 +17,7 @@ public class RestockController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<IEnumerable<RestockingRecord>>> Get([FromQuery] int page = 1, [FromQuery] int pageSize = 15)
     {
         var records = await _restockService.GetAllAsync(page, pageSize);
@@ -25,7 +25,7 @@ public class RestockController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<RestockingRecord>> GetById(int id)
     {
         var record = await _restockService.GetByIdAsync(id);
@@ -34,7 +34,7 @@ public class RestockController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<RestockingRecord>> Create([FromBody] RestockCreateRequest request)
     {
         var userId = User.GetUserIdOrThrow();
@@ -57,7 +57,7 @@ public class RestockController : ControllerBase
     }
 
     [HttpGet("item/{itemId:int}")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<IEnumerable<RestockingRecord>>> GetByItem(int itemId)
     {
         var records = await _restockService.GetByItemAsync(itemId);

@@ -21,7 +21,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("owner-summary")]
-    [Authorize(Roles = "admin,owner,shop_owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> GetOwnerSummary()
     {
         var today = DateTime.UtcNow.Date;
@@ -106,7 +106,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("summary")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetSummary([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         var summary = await _reportService.GetDashboardSummaryAsync(from, to);
@@ -114,7 +114,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("sales-report")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetSalesReport([FromQuery] DateTime from, [FromQuery] DateTime to)
     {
         var report = await _reportService.GetSalesReportAsync(from, to);
@@ -122,7 +122,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("member-report/{memberId:int}")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetMemberReport(int memberId)
     {
         var report = await _reportService.GetMemberReportAsync(memberId);
@@ -130,7 +130,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("stock-report")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetStockReport()
     {
         var report = await _reportService.GetStockReportAsync();
@@ -138,7 +138,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("loan-report")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetLoanReport([FromQuery] DateTime from, [FromQuery] DateTime to)
     {
         var report = await _reportService.GetLoanReportAsync(from, to);
@@ -146,7 +146,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("alerts")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<object>> GetAlerts()
     {
         var lowStock = await _context.Items
@@ -179,7 +179,7 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("employee-summary")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<object>> GetEmployeeSummary()
     {
         var today = DateTime.UtcNow.Date;

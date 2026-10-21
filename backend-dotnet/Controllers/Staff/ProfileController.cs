@@ -17,7 +17,7 @@ public class ProfileController : ControllerBase
     }
 
     [HttpGet("profile")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetProfile()
     {
         var userId = User.GetUserId();
@@ -39,7 +39,7 @@ public class ProfileController : ControllerBase
     }
 
     [HttpPut("profile")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> UpdateProfile([FromBody] StaffProfileUpdate request)
     {
         var userId = User.GetUserId();

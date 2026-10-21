@@ -845,6 +845,44 @@ def suite_reports(base):
     check("stock-valuation total equals DB sum", api_val is not None and
           abs(float(api_val) - float(db_val)) < 0.01, f"api={api_val} db={db_val}")
 
+    # Reports must be readable by BOTH admin and the actual owner role
+    # (shop_owner) and forbidden for plain employees.
+    s, d, _ = req("POST", "/api/auth/staff/login",
+                  {"email": "owner@koperasi.test", "password": "password"}, base=base)
+    owner_token = (d or {}).get("token") if s == 200 else None
+    check("owner login for reports", bool(owner_token), f"got {s}")
+    if owner_token:
+        for ep in ("/api/reports/summary", "/api/reports/stock-valuation",
+                   "/api/reports/best-sellers", "/api/dashboard/summary",
+                   "/api/reports/transactions/export?format=csv"):
+            s2, _, _ = req("GET", ep, token=owner_token, base=base)
+            check(f"shop_owner may GET {ep.split('?')[0].split('/api/')[1]}", s2 == 200, f"got {s2}")
+    s, d, _ = req("POST", "/api/auth/staff/login",
+                  {"email": "kasir1@koperasi.test", "password": "password"}, base=base)
+    kasir_token = (d or {}).get("token") if s == 200 else None
+    if kasir_token:
+        s2, _, _ = req("GET", "/api/reports/summary", token=kasir_token, base=base)
+        check("employee forbidden on /reports/summary", s2 == 403, f"got {s2}")
+
+    # Summary math: revenue from transactions.total_amount, and COGS must be
+    # the items' cost-based sum (the old formula summed the SALE price).
+    s, d, _ = req("GET", "/api/reports/summary", token=STAFF_TOKEN, base=base)
+    db_revenue = sql("SELECT ROUND(SUM(COALESCE(total,0)),2) FROM transactions "
+                     "WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY AND created_at <= UTC_TIMESTAMP()")
+    db_cogs = sql("SELECT ROUND(SUM(COALESCE(i.cost_price,0)*ti.quantity),2) FROM transaction_items ti "
+                  "JOIN transactions t ON t.id = ti.transaction_id JOIN items i ON i.id = ti.item_id "
+                  "WHERE ti.created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY AND ti.created_at <= UTC_TIMESTAMP()")
+    api_rev = (d or {}).get("revenue")
+    api_cogs = (d or {}).get("cost_of_goods_sold")
+    check("reports summary revenue matches SQL", api_rev is not None and
+          abs(float(api_rev) - float(db_revenue)) < 1.00, f"api={api_rev} db={db_revenue}")
+    check("reports summary COGS is item-cost (not sale price)", api_cogs is not None and
+          abs(float(api_cogs) - float(db_cogs)) < 1.00, f"api={api_cogs} db={db_cogs}")
+    check("reports summary count matches SQL",
+          str((d or {}).get("transaction_count")) == sql(
+              "SELECT COUNT(*) FROM transactions WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY "
+              "AND created_at <= UTC_TIMESTAMP()"), f"api={d.get('transaction_count')}")
+
     s, d, _ = req("GET", "/api/dashboard/alerts", token=STAFF_TOKEN, base=base)
     db_low = sql("SELECT COUNT(*) FROM items WHERE (min_stock_threshold IS NOT NULL AND COALESCE(current_stock,0) <= min_stock_threshold) OR (min_stock_threshold IS NULL AND COALESCE(current_stock,0) <= 10)")
     check("alerts low_stock count matches DB", str(len((d or {}).get("low_stock", []))) == db_low,

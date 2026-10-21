@@ -19,7 +19,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<PaginatedResponse<dynamic>>> GetUsers(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -66,7 +66,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> GetUser(int id)
     {
         var u = await _context.Users.FindAsync(id);
@@ -86,7 +86,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> CreateUser([FromBody] UserCreateRequest request)
     {
         var existing = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
@@ -120,7 +120,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> UpdateUser(int id, [FromBody] UserUpdateRequest request)
     {
         var u = await _context.Users.FindAsync(id);
@@ -144,7 +144,7 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<IActionResult> DeleteUser(int id, [FromQuery(Name = "force")] int force = 0)
     {
         var u = await _context.Users.FindAsync(id);

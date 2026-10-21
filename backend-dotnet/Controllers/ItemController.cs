@@ -28,7 +28,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,member,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,member,employee")]
     public async Task<ActionResult<PaginatedResponse<Item>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -51,7 +51,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,member,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,member,employee")]
     public async Task<ActionResult<Item>> GetById(int id)
     {
         var item = await _itemService.GetByIdAsync(id);
@@ -69,7 +69,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Item>> Create()
     {
         var form = await Request.ReadFormAsync();
@@ -107,7 +107,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPost("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Item>> CreateOrUpdate(int id)
     {
         // Laravel-style _method spoofing: frontend sends POST with _method=PUT
@@ -121,7 +121,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Item>> Update(int id, IFormCollection form = null!)
     {
         try
@@ -187,7 +187,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPost("{id:int}/activate")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Item>> Activate(int id)
     {
         var item = await _itemService.ActivateAsync(id);
@@ -196,7 +196,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
         var success = await _itemService.DeleteAsync(id, force != 0);
@@ -205,7 +205,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpGet("search/{query}")]
-    [Authorize(Roles = "admin,owner,manager,member,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,member,employee")]
     public async Task<ActionResult<IEnumerable<Item>>> Search(string query)
     {
         var items = await _itemService.SearchAsync(query);
@@ -213,7 +213,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpGet("low-stock")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<IEnumerable<Item>>> GetLowStock([FromQuery] int threshold = 10)
     {
         var items = await _itemService.GetLowStockAsync(threshold);
@@ -221,7 +221,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpGet("count")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<object>> GetCount()
     {
         var count = await _itemService.GetTotalCountAsync();

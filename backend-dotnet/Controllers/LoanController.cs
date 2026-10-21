@@ -18,7 +18,7 @@ public class LoanController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,shop_owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<PagedResult<Loan>>> GetPaged(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -31,7 +31,7 @@ public class LoanController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,shop_owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Loan>> GetById(int id)
     {
         var loan = await _loanService.GetByIdAsync(id);
@@ -40,7 +40,7 @@ public class LoanController : ControllerBase
     }
 
     [HttpPost("{id:int}/approve")]
-    [Authorize(Roles = "admin,owner,shop_owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Loan>> Approve(int id)
     {
         var userId = User.GetUserIdOrThrow();
@@ -56,7 +56,7 @@ public class LoanController : ControllerBase
     }
 
     [HttpPost("{id:int}/reject")]
-    [Authorize(Roles = "admin,owner,shop_owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Loan>> Reject(int id, [FromBody] LoanActionRequest? request = null)
     {
         try
@@ -71,7 +71,7 @@ public class LoanController : ControllerBase
     }
 
     [HttpPost("{id:int}/write-off")]
-    [Authorize(Roles = "admin,owner,shop_owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Loan>> WriteOff(int id, [FromBody] LoanActionRequest? request = null)
     {
         try
@@ -86,7 +86,7 @@ public class LoanController : ControllerBase
     }
 
     [HttpPost("{id:int}/pay")]
-    [Authorize(Roles = "admin,owner,shop_owner,employee,manager")]
+    [Authorize(Roles = "admin,shop_owner,employee,manager")]
     public async Task<ActionResult<Loan>> Pay(int id, [FromBody] LoanPaymentRequest request)
     {
         var userId = User.GetUserIdOrThrow();

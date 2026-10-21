@@ -18,7 +18,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<PaginatedResponse<Supplier>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -38,7 +38,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Supplier>> GetById(int id)
     {
         var supplier = await _supplierService.GetByIdAsync(id);
@@ -47,7 +47,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Supplier>> Create([FromBody] Supplier supplier)
     {
         var created = await _supplierService.CreateAsync(supplier);
@@ -55,7 +55,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Supplier>> Update(int id, [FromBody] Supplier supplier)
     {
         try
@@ -70,7 +70,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Delete(int id)
     {
         var success = await _supplierService.DeleteAsync(id);
@@ -79,7 +79,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpGet("search/{query}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<IEnumerable<Supplier>>> Search(string query)
     {
         var suppliers = await _supplierService.SearchAsync(query);

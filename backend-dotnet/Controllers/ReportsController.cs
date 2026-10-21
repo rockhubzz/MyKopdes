@@ -18,7 +18,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("stock-valuation")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetStockValuation()
     {
         var totalValueAtCost = await _context.Items.SumAsync(i => (i.Stock ?? 0) * (i.Cost ?? 0));
@@ -39,7 +39,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("summary")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<object>> GetSummary([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         from ??= DateTime.UtcNow.AddDays(-30);
@@ -52,7 +52,7 @@ public class ReportsController : ControllerBase
         var cost = await _context.Transactions
             .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
             .SelectMany(t => t.Items!)
-            .SumAsync(ti => (decimal)(ti.Price ?? 0) * ti.Quantity);
+            .SumAsync(ti => (ti.Item != null ? (ti.Item.Cost ?? 0) : 0m) * ti.Quantity);
 
         var transactionCount = await _context.Transactions
             .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)
@@ -84,7 +84,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("best-sellers")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<ActionResult<IEnumerable<object>>> GetBestSellers([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         from ??= DateTime.UtcNow.AddDays(-30);
@@ -109,7 +109,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("transactions/export")]
-    [Authorize(Roles = "admin,owner,manager")]
+    [Authorize(Roles = "admin,shop_owner,manager")]
     public async Task<IActionResult> ExportTransactions([FromQuery] string format = "csv", [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         from ??= DateTime.UtcNow.AddDays(-30);

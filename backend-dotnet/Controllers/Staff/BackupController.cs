@@ -16,7 +16,7 @@ public class BackupController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> Create([FromQuery] string? outputFile = null)
     {
         var result = await _backupService.CreateBackupAsync(outputFile);
@@ -24,7 +24,7 @@ public class BackupController : ControllerBase
     }
 
     [HttpGet("last")]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> GetLast()
     {
         var path = await _backupService.GetLastBackupPathAsync();
@@ -32,7 +32,7 @@ public class BackupController : ControllerBase
     }
 
     [HttpPost("restore")]
-    [Authorize(Roles = "admin,owner")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<bool>> Restore([FromQuery] string backupFile)
     {
         var success = await _backupService.RestoreBackupAsync(backupFile);

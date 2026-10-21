@@ -32,7 +32,7 @@ public class TransactionController : ControllerBase
     /// <param name="search">Optional text filter on code/member/cashier.</param>
     /// <param name="paymentMethod">Optional exact payment method filter (e.g. cash, qr).</param>
     [HttpGet]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<PaginatedResponse<Transaction>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -54,7 +54,7 @@ public class TransactionController : ControllerBase
 
     /// <summary>Fetch one transaction with its line items, member, and cashier.</summary>
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Transaction>> GetById(int id)
     {
         var transaction = await _transactionService.GetByIdAsync(id);
@@ -68,7 +68,7 @@ public class TransactionController : ControllerBase
     /// optional member_identifier and discount_id.
     /// </summary>
     [HttpPost("preview")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<object>> Preview([FromBody] CheckoutRequest request)
     {
         return Ok(await BuildCheckoutResult(request, commit: false));
@@ -80,7 +80,7 @@ public class TransactionController : ControllerBase
     /// stock, and returns the receipt-ready transaction.
     /// </summary>
     [HttpPost("checkout")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Transaction>> Checkout([FromBody] CheckoutRequest request)
     {
         var result = await BuildCheckoutResult(request, commit: true);
@@ -91,7 +91,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Transaction>> Create([FromBody] Transaction transaction)
     {
         var created = await _transactionService.CreateAsync(transaction);
@@ -99,7 +99,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Transaction>> Update(int id, [FromBody] Transaction transaction)
     {
         try
@@ -114,7 +114,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Delete(int id)
     {
         var success = await _transactionService.DeleteAsync(id);
@@ -123,7 +123,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpGet("member/{memberId:int}")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<IEnumerable<Transaction>>> GetByMember(int memberId)
     {
         var transactions = await _transactionService.GetByMemberAsync(memberId);
@@ -131,7 +131,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("purchase")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Transaction>> CreatePurchase([FromBody] PurchaseRequest request)
     {
         var transaction = await _transactionService.ProcessPurchaseAsync(
@@ -140,7 +140,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("{id:int}/void")]
-    [Authorize(Roles = "admin,owner,manager,shop_owner,employee")]
+    [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<IActionResult> Void(int id)
     {
         var success = await _transactionService.VoidAsync(id);
