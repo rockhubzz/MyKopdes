@@ -16,12 +16,19 @@ CMD ["npm", "run", "dev"]
 # ---- build stage for production -------------------------------------------
 FROM base AS build
 COPY . .
+# Next.js works without a public/ dir, but the production stage copies it
+# explicitly — make sure it exists even on the freshest checkout.
+RUN mkdir -p /app/public
 RUN npm run build
 
 # ---- production target -----------------------------------------------------
 FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
+# Docker sets HOSTNAME=<container-hostname> in the environment, and Next's
+# standalone server binds to exactly that — leaving out 0.0.0.0 breaks the
+# localhost healthcheck and any mapping other than the container IP.
+ENV HOSTNAME=0.0.0.0
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
