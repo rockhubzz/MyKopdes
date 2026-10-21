@@ -23,6 +23,7 @@
 #   --force            overwrite the destination without asking.
 #   --yes | -y         accept every default (fresh secrets generated) and
 #                      write immediately.
+#   env TLS_ANSWER=y   pre-answer the TLS question (scripted/CI runs).
 # ----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -133,10 +134,69 @@ prompt "HTTP port for the site (nginx)" "${APP_PORT:-80}"
 APP_PORT="$REPLY"
 validate_port "$APP_PORT" "APP_PORT"
 
-if [ "$APP_PORT" = "80" ]; then
-  prompt "Public URL users visit (JWT issuer/audience)" "http://localhost"
+echo
+if [ -n "${TLS_ANSWER:-}" ]; then # scripted/CI override: TLS_ANSWER=y|n (wins over --yes)
+  TLS_ANS="$TLS_ANSWER"
+elif [ "$ASSUME_YES" = true ]; then
+  TLS_ANS="n"
 else
-  prompt "Public URL users visit (JWT issuer/audience)" "http://localhost:$APP_PORT"
+  echo "HTTPS/TLS (optional): nginx serves TLS from certs in ./nginx/certs."
+  echo "The wizard can generate a SELF-SIGNED pair (fine for internal/testing"
+  echo "use — browsers will show a warning). Without TLS the site works over"
+  echo "plain HTTP only. Real deployments should drop in real certs instead."
+  if [ -t 0 ]; then
+    read -r -p "Enable TLS? [y/N]: " TLS_ANS && echo || TLS_ANS=""
+  else
+    TLS_ANS=""
+  fi
+fi
+case "${TLS_ANS:-n}" in [Yy]*) TLS_ENABLED="true";; *) TLS_ENABLED="false";; esac
+
+if [ "$TLS_ENABLED" = true ]; then
+  prompt "HTTPS port (used by docker-compose.prod-https.yml)" "${TLS_PORT:-443}"
+  TLS_PORT="$REPLY"
+  validate_port "$TLS_PORT" "TLS_PORT"
+
+  CERT_DIR="$REPO_DIR/nginx/certs"
+  if [ -f "$CERT_DIR/fullchain.pem" ] && [ -f "$CERT_DIR/privkey.pem" ]; then
+    echo "  Existing certificates found in $CERT_DIR — keeping them."
+  else
+    mkdir -p "$CERT_DIR"
+    GEN_OK=false
+    # Prefer host openssl; fall back to a throwaway alpine container (docker
+    # is required for this stack anyway).
+    if command -v openssl >/dev/null 2>&1; then
+      if openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$CERT_DIR/privkey.pem" -out "$CERT_DIR/fullchain.pem" \
+            -days 825 -subj "/CN=MyKopdes" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1; then
+        GEN_OK=true
+      fi
+    elif command -v docker >/dev/null 2>&1; then
+      if docker run --rm -v "$CERT_DIR:/certs" alpine:3 sh -c \
+        "apk add --no-cache openssl >/dev/null 2>&1 && openssl req -x509 -newkey rsa:2048 -nodes -keyout /certs/privkey.pem -out /certs/fullchain.pem -days 825 -subj '/CN=MyKopdes' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1'" >/dev/null 2>&1; then
+        GEN_OK=true
+      fi
+    fi
+    if [ "$GEN_OK" = true ]; then
+      echo "  Generated self-signed certificate in $CERT_DIR (825 days)."
+      echo "  Replace it with a real one for public/production domains."
+    else
+      errors+=("TLS: could not generate a self-signed certificate (no openssl/docker) — place fullchain.pem + privkey.pem in $CERT_DIR manually")
+    fi
+  fi
+else
+  TLS_PORT="${TLS_PORT:-443}"
+fi
+
+if [ "$TLS_ENABLED" = true ]; then
+  prompt "Public URL users visit (JWT issuer/audience)" "https://localhost"
+else
+  if [ "$APP_PORT" = "80" ]; then
+    prompt "Public URL users visit (JWT issuer/audience)" "http://localhost"
+  else
+    prompt "Public URL users visit (JWT issuer/audience)" "http://localhost:$APP_PORT"
+  fi
 fi
 APP_URL="$REPLY"
 
@@ -210,6 +270,7 @@ echo "------------- summary ($ENV_FILE) -------------"
 mask() { local v="$1" n=${#1}; if [ $n -le 4 ]; then echo "****"; else echo "${v:0:3}****"; fi; }
 cat <<EOF
   APP_PORT                 = $APP_PORT
+  TLS                      = $(if [ "$TLS_ENABLED" = true ]; then echo "enabled (TLS_PORT=$TLS_PORT)"; else echo "disabled"; fi)
   APP_URL                  = $APP_URL
   DB_DATABASE/USER         = $DB_DATABASE / $DB_USERNAME
   DB_PASSWORD              = $(mask "$DB_PASSWORD")
@@ -272,6 +333,10 @@ JWT_KEY=$JWT_KEY
 JWT_EXPIRY_MINUTES=$JWT_EXPIRY_MINUTES
 APP_URL=$APP_URL
 
+# TLS: docker-compose.prod.yml boots HTTP-only; docker-compose.prod-https.yml
+# (extra -f file) swaps in nginx/prod-tls.conf and publishes TLS_PORT.
+TLS_PORT=$TLS_PORT
+
 # Browser base URL for API calls. /api = same-origin via nginx
 # (recommended); must be baked in at image build time (rebuild to change).
 NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
@@ -303,6 +368,11 @@ echo
 echo "Next steps:"
 echo "  1) start the stack:   docker compose up -d --build"
 echo "     (prod variant:     docker compose -f docker-compose.prod.yml --env-file $ENV_FILE up -d --build)"
+if [ "$TLS_ENABLED" = true ]; then
+  echo "     (HTTPS variant:    docker compose -f docker-compose.prod.yml -f docker-compose.prod-https.yml --env-file $ENV_FILE up -d --build)"
+else
+  echo "     (HTTPS later: generate certs in ./nginx/certs and add -f docker-compose.prod-https.yml)"
+fi
 echo "  2) open http://localhost:$APP_PORT and log in (demo logins: README)."
 echo
 echo "  The database is seeded with demo data automatically on the first boot"

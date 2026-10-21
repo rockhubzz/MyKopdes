@@ -79,7 +79,7 @@ Notes:
 ```
 koperasi-app/
 ├── docker-compose.yml         # local dev stack
-├── docker-compose.prod.yml    # production stack (SSL-ready Nginx)
+├── docker-compose.prod.yml    # production stack (HTTP default; -f prod-https.yml adds TLS)
 ├── nginx/                     # reverse proxy configs for both
 ├── mysql/init/                # schema + demo seed applied on first boot
 ├── scripts/
@@ -160,11 +160,22 @@ scheduled dumps.
 ## Production deployment
 
 ```bash
-cp .env.production.example .env.production   # fill in DB creds + your domain
-# Drop TLS certs into nginx/certs/ (fullchain.pem, privkey.pem — see
-# nginx/certs/README.md) and set server_name in nginx/prod.conf.
+bash scripts/setup.sh --file .env.production   # wizard: secrets, ports, optional TLS
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
+
+The prod stack's `nginx/prod.conf` is **HTTP-only by default**, so a fresh
+deployment boots without any certificates. For HTTPS/TLS:
+
+```bash
+# real certs: put fullchain.pem + privkey.pem into ./nginx/certs first;
+# or let the wizard answer "Enable TLS? [y/N]" → y generate a self-signed pair
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-https.yml \
+    --env-file .env.production up -d --build
+```
+
+(the TLS variant swaps in `nginx/prod-tls.conf`: 80 → 443 redirect, HSTS,
+and publishes `TLS_PORT` — default 443).
 
 Optionally seed demo data on a real store with:
 `docker compose -f docker-compose.prod.yml exec -T mysql sh -c "exec mysql -uroot -p<root_pw> koperasi" < mysql/init/01_koperasi_schema_seed.sql`
