@@ -176,3 +176,78 @@ export interface AuditLog {
   ip_address: string | null;
   created_at: string;
 }
+
+// ─── Loans ───────────────────────────────────────────────────────────────────
+
+export type LoanStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'active' | 'paid_off' | 'written_off';
+
+export interface LoanProduct {
+  id: number;
+  name: string;
+  description: string | null;
+  interest_rate: string;        // decimal:4, e.g. "0.0100"
+  interest_period: 'monthly' | 'annual';
+  min_term_months: number;
+  max_term_months: number;
+  min_amount: string;
+  max_amount: string | null;
+  processing_fee_rate: string;  // decimal:4
+  eligibility_rule: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoanPayment {
+  id: number;
+  loan_id: number;
+  recorded_by: number | null;
+  recordedBy?: StaffUser | null;
+  amount: string;
+  payment_method: PaymentMethod;
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Loan {
+  id: number;
+  loan_code: string;
+  member_id: number;
+  member?: Member;
+  loan_product_id: number;
+  product?: LoanProduct;
+  approved_by: number | null;
+  approvedBy?: StaffUser | null;
+  principal: string;
+  interest_rate: string;
+  interest_period: 'monthly' | 'annual';
+  term_months: number;
+  processing_fee: string;
+  outstanding_balance: string;
+  accrued_interest: string;
+  total_paid: string;
+  status: LoanStatus;
+  applied_at: string | null;
+  approved_at: string | null;
+  first_due_at: string | null;
+  due_at: string | null;
+  paid_off_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  payments?: LoanPayment[];
+  minimum_installment?: number;  // computed on the backend when shown
+}
+
+export interface LoanSummary {
+  total_outstanding: number;
+  active_count: number;
+  pending_count: number;
+}
+
+export interface MemberLoanIndex {
+  loans: Paginated<Loan>;
+  products: LoanProduct[];
+}

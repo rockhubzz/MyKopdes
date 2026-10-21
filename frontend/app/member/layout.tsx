@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { History, House, Receipt, Tags, User, Wallet } from 'lucide-react';
+import { History, House, Receipt, Tags, User, Wallet, CreditCard } from 'lucide-react';
 import AppShell, { NavItem } from '@/components/AppShell';
 import { PROFILE_UPDATED_EVENT } from '@/components/StaffProfileForm';
 import { apiFetch, apiPrefetch } from '@/lib/api';
@@ -14,6 +14,7 @@ const NAV_KEYS: { href: string; labelKey: TKey; icon: React.ReactNode; prefetchA
   { href: '/member/history', labelKey: 'nav.myPurchases', icon: <Receipt size={16} />, prefetchApi: ['/member/transactions?page=1&per_page=15'] },
   { href: '/member/discounts', labelKey: 'nav.discountsForMe', icon: <Tags size={16} />, prefetchApi: ['/member/discounts'] },
   { href: '/member/shu', labelKey: 'nav.mySHU', icon: <Wallet size={16} />, prefetchApi: ['/member/shu'] },
+  { href: '/member/loans', labelKey: 'memberLoans.title', icon: <CreditCard size={16} />, prefetchApi: ['/member/loans', '/member/dashboard-summary'] },
   { href: '/member/profile', labelKey: 'nav.myProfile', icon: <User size={16} />, prefetchApi: ['/member/profile'] },
 ];
 

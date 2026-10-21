@@ -1,6 +1,7 @@
 import {
   Archive,
   Boxes,
+  CreditCard,
   FolderOpen,
   History,
   IdCard,
@@ -56,6 +57,7 @@ export const STAFF_NAVS: Record<StaffRole, StaffNavEntry[]> = {
     { href: '/admin/members', labelKey: 'nav.members', icon: <IdCard size={S} />, prefetchApi: ['/members?page=1&per_page=15'] },
     { href: '/admin/users', labelKey: 'nav.staffAccounts', icon: <Users size={S} />, prefetchApi: ['/users?page=1&per_page=15'] },
     { href: '/admin/discounts', labelKey: 'nav.discountsPromos', icon: <Tag size={S} />, prefetchApi: ['/discounts?page=1&per_page=15'] },
+    { href: '/admin/loan-products', labelKey: 'loanProducts.title', icon: <CreditCard size={S} />, prefetchApi: ['/loan-products?page=1&per_page=15'] },
     { href: '/admin/settings', labelKey: 'nav.settings', icon: <Settings size={S} />, prefetchApi: ['/admin/settings'] },
     { href: '/admin/audit-logs', labelKey: 'nav.auditLog', icon: <ScrollText size={S} />, prefetchApi: ['/audit-logs?page=1&per_page=15'] },
     { href: '/admin/backups', labelKey: 'nav.backupRestore', icon: <Archive size={S} />, prefetchApi: ['/backups'] },
@@ -69,6 +71,7 @@ export const STAFF_NAVS: Record<StaffRole, StaffNavEntry[]> = {
     { href: '/owner/employees', labelKey: 'nav.employees', icon: <User size={S} />, prefetchApi: ['/employees?page=1&per_page=15'] },
     { href: '/owner/members', labelKey: 'nav.members', icon: <IdCard size={S} />, prefetchApi: ['/members?page=1&per_page=15'] },
     { href: '/owner/transactions', labelKey: 'nav.transactions', icon: <Receipt size={S} />, prefetchApi: ['/transactions?page=1&per_page=15'] },
+    { href: '/owner/loans', labelKey: 'loans.memberLoansTitle', icon: <CreditCard size={S} />, prefetchApi: ['/loans?page=1&per_page=15'] },
     { href: '/owner/reports', labelKey: 'nav.reports', icon: <TrendingUp size={S} />, prefetchApi: ['/reports/stock-valuation'] },
     { href: '/owner/profile', labelKey: 'nav.myProfile', icon: <User size={S} /> },
   ],

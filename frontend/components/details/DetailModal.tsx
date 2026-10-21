@@ -5,6 +5,7 @@ import { ArrowLeft, X } from 'lucide-react';
 import { CategoryDetails, ItemDetails } from './catalog';
 import { MemberDetails, SupplierDetails, UserDetails } from './people';
 import { DiscountDetails, RestockDetails, TransactionDetails } from './sales';
+import { LoanDetails } from './loan';
 import { AuditLogDetails } from './AuditLogDetails';
 import { useLanguage, type TKey } from '@/lib/i18n/LanguageContext';
 
@@ -17,7 +18,8 @@ export type DetailEntity =
   | 'discount'
   | 'user'
   | 'restock'
-  | 'auditlog';
+  | 'auditlog'
+  | 'loan';
 
 export interface DetailTarget {
   entity: DetailEntity;
@@ -36,6 +38,7 @@ const TITLE_KEYS: Record<DetailEntity, TKey> = {
   user: 'details.titleUser',
   restock: 'details.titleRestock',
   auditlog: 'details.titleAuditlog',
+  loan: 'loans.title',
 };
 
 function Body({ target, navigate }: { target: DetailTarget; navigate: (t: DetailTarget) => void }) {
@@ -58,6 +61,8 @@ function Body({ target, navigate }: { target: DetailTarget; navigate: (t: Detail
       return <RestockDetails id={target.id} navigate={navigate} />;
     case 'auditlog':
       return <AuditLogDetails id={target.id} />;
+    case 'loan':
+      return <LoanDetails id={target.id} endpointBase={target.endpointBase} navigate={navigate} />;
   }
 }
 
