@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MyKopdes.Data;
 using MyKopdes.Models;
 using MyKopdes.Models.DTOs;
+using MyKopdes.Middleware;
 
 namespace MyKopdes.Controllers.Staff;
 
@@ -19,14 +20,16 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<PaginatedResponse<dynamic>>> GetUsers(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
         [FromQuery] string? search = null,
-        [FromQuery(Name = "include_inactive")] bool includeInactive = false)
+        [FromQuery(Name = "include_inactive")] bool includeInactive = false,
+        [FromQuery] string? role = null)
     {
         var query = _context.Users.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(role)) query = query.Where(u => u.Role == role);
         if (!string.IsNullOrEmpty(search))
         {
             query = query.Where(u => u.Name.Contains(search) || u.Email.Contains(search) ||
@@ -39,7 +42,7 @@ public class UserController : ControllerBase
 
         var total = await query.CountAsync();
         var users = await query
-            .OrderByDescending(u => u.CreatedAt)
+            .OrderBy(u => u.Name)
             .Select(u => new
             {
                 u.Id,
@@ -66,7 +69,7 @@ public class UserController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<object>> GetUser(int id)
     {
         var u = await _context.Users.FindAsync(id);
@@ -86,9 +89,11 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<object>> CreateUser([FromBody] UserCreateRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.Role) || !new[] { "admin", "shop_owner", "employee" }.Contains(request.Role))
+            return BadRequest(new { message = "A valid role is required" });
         var existing = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
         if (existing != null) return BadRequest(new { message = "Email already in use" });
 
@@ -120,7 +125,7 @@ public class UserController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<object>> UpdateUser(int id, [FromBody] UserUpdateRequest request)
     {
         var u = await _context.Users.FindAsync(id);
@@ -144,14 +149,19 @@ public class UserController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> DeleteUser(int id, [FromQuery(Name = "force")] int force = 0)
     {
         var u = await _context.Users.FindAsync(id);
         if (u == null) return NotFound(new { message = "User not found" });
+        if (User.GetUserId() == id)
+            return UnprocessableEntity(new { message = "You cannot deactivate your own account" });
 
         if (force != 0)
         {
+            if (await _context.Transactions.AnyAsync(t => t.UserId == id) ||
+                await _context.RestockingRecords.AnyAsync(r => r.UserId == id))
+                return UnprocessableEntity(new { message = "Cannot permanently delete a user with transaction or restock history" });
             _context.Users.Remove(u);
         }
         else
@@ -169,6 +179,8 @@ public class UserCreateRequest
 {
     public string Name { get; set; } = null!;
     public string Email { get; set; } = null!;
+    [System.ComponentModel.DataAnnotations.MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
+    [System.ComponentModel.DataAnnotations.Required]
     public string Password { get; set; } = null!;
     public string? Role { get; set; }
     public string? Phone { get; set; }

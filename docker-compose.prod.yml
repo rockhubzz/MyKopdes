@@ -30,8 +30,8 @@ services:
     environment:
       MYSQL_DATABASE: ${DB_DATABASE:-koperasi}
       MYSQL_USER: ${DB_USERNAME:-koperasi}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-koperasi_secret}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret}
+      MYSQL_PASSWORD: ${DB_PASSWORD:? must be set in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:? must be set in .env}
     # Auto-seed: runs on the first boot of an EMPTY data volume only.
     volumes:
       - mysql_data:/var/lib/mysql
@@ -39,13 +39,13 @@ services:
     networks:
       - koperasi_net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_secret}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 20
     # No published port: only reachable from other containers on koperasi_net.
 
-  # ---- .NET 8 backend (all API routes) ----
+  # ---- .NET 10 backend (all API routes) ----
   backend-dotnet:
     build:
       context: ./backend-dotnet
@@ -56,8 +56,8 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      DB_CONNECTION_STRING: "server=mysql;port=3306;database=${DB_DATABASE:-koperasi};user=${DB_USERNAME:-koperasi};password=${DB_PASSWORD:-koperasi_secret};SslMode=none;AllowPublicKeyRetrieval=true"
-      JWT_KEY: ${JWT_KEY:-KoperasiSuperSecretKeyForJwtTokens2024!}
+      DB_CONNECTION_STRING: "server=mysql;port=3306;database=${DB_DATABASE:-koperasi};user=${DB_USERNAME:-koperasi};password=${DB_PASSWORD:? DB_PASSWORD must be set in .env};AllowPublicKeyRetrieval=false"
+      JWT_KEY: ${JWT_KEY:? must be set in .env}
       JWT_ISSUER: ${APP_URL:-http://localhost}
       JWT_AUDIENCE: ${APP_URL:-http://localhost}
       JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES:-1440}

@@ -13,9 +13,16 @@ public class AuditLogService : IAuditLogService
         _context = context;
     }
 
-    public async Task<List<AuditLog>> GetAllAsync(int page = 1, int pageSize = 50)
+    public async Task<List<AuditLog>> GetAllAsync(int page = 1, int pageSize = 50, string? action = null,
+        int? actorId = null, DateTime? from = null, DateTime? to = null)
     {
-        return await _context.AuditLogs
+        var query = _context.AuditLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(action)) query = query.Where(a => a.Action != null && a.Action.Contains(action));
+        if (actorId.HasValue) query = query.Where(a => a.UserId == actorId.Value);
+        if (from.HasValue) query = query.Where(a => a.CreatedAt >= from.Value.Date);
+        if (to.HasValue) query = query.Where(a => a.CreatedAt < to.Value.Date.AddDays(1));
+
+        return await query
             .Include(a => a.User)
             .OrderByDescending(a => a.CreatedAt)
             .Skip((page - 1) * pageSize)
@@ -23,9 +30,14 @@ public class AuditLogService : IAuditLogService
             .ToListAsync();
     }
 
-    public async Task<int> GetTotalCountAsync()
+    public async Task<int> GetTotalCountAsync(string? action = null, int? actorId = null, DateTime? from = null, DateTime? to = null)
     {
-        return await _context.AuditLogs.CountAsync();
+        var query = _context.AuditLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(action)) query = query.Where(a => a.Action != null && a.Action.Contains(action));
+        if (actorId.HasValue) query = query.Where(a => a.UserId == actorId.Value);
+        if (from.HasValue) query = query.Where(a => a.CreatedAt >= from.Value.Date);
+        if (to.HasValue) query = query.Where(a => a.CreatedAt < to.Value.Date.AddDays(1));
+        return await query.CountAsync();
     }
 
     public async Task<AuditLog?> GetByIdAsync(int id)

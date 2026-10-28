@@ -11,7 +11,6 @@ public class Loan
     public string LoanCode { get; set; } = null!;  // loan_code
     [System.Text.Json.Serialization.JsonPropertyName("member_id")]
     public int MemberId { get; set; }
-    [System.Text.Json.Serialization.JsonIgnore]
     [ValidateNever] // navigation property — EF loads it, clients never send it
     public Member Member { get; set; } = null!;
     [System.Text.Json.Serialization.JsonPropertyName("loan_product_id")]
@@ -27,6 +26,9 @@ public class Loan
     [System.Text.Json.Serialization.JsonIgnore]
     [ValidateNever]
     public User? User { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("approvedBy")]
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public User? ApprovedBy => User;
     [System.Text.Json.Serialization.JsonPropertyName("principal")]
     public decimal? PrincipalAmount { get; set; }  // principal
     [System.Text.Json.Serialization.JsonPropertyName("interest_rate")]
@@ -60,7 +62,6 @@ public class Loan
     public DateTime? UpdatedAt { get; set; }
 
     // Navigation properties
-    [System.Text.Json.Serialization.JsonIgnore]
     [ValidateNever]
     public List<LoanPayment> Payments { get; set; } = new();
 }

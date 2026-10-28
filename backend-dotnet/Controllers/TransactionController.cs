@@ -6,6 +6,7 @@ using MyKopdes.Data;
 using MyKopdes.Models;
 using MyKopdes.Models.DTOs;
 using MyKopdes.Services;
+using MyKopdes.Middleware;
 
 namespace MyKopdes.Controllers;
 
@@ -37,16 +38,20 @@ public class TransactionController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
         [FromQuery] string? search = null,
-        [FromQuery(Name = "payment_method")] string? paymentMethod = null)
+        [FromQuery(Name = "payment_method")] string? paymentMethod = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery(Name = "member_id")] int? memberId = null)
     {
-        var transactions = await _transactionService.GetAllAsync(page, pageSize, search, paymentMethod);
-        var total = await _transactionService.GetTotalCountAsync(search, paymentMethod);
+        var cashierId = User.IsInRole("employee") ? User.GetUserId() : null;
+        var transactions = await _transactionService.GetAllAsync(page, Math.Min(pageSize, 200), search, paymentMethod, from, to, memberId, cashierId);
+        var total = await _transactionService.GetTotalCountAsync(search, paymentMethod, from, to, memberId, cashierId);
         var totalPages = (int)Math.Ceiling((double)total / pageSize);
         return Ok(new PaginatedResponse<Transaction>
         {
             Data = transactions,
             Page = page,
-            PageSize = pageSize,
+            PageSize = Math.Min(pageSize, 200),
             Total = total,
             TotalPages = totalPages
         });
@@ -71,7 +76,17 @@ public class TransactionController : ControllerBase
     [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<object>> Preview([FromBody] CheckoutRequest request)
     {
-        return Ok(await BuildCheckoutResult(request, commit: false));
+        var validationError = ValidateCheckoutRequest(request, requirePaymentMethod: false);
+        if (validationError != null) return BadRequest(new { message = validationError });
+
+        try
+        {
+            return Ok(await BuildCheckoutResult(request, commit: false));
+        }
+        catch (CheckoutValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -83,7 +98,18 @@ public class TransactionController : ControllerBase
     [Authorize(Roles = "admin,shop_owner,manager,employee")]
     public async Task<ActionResult<Transaction>> Checkout([FromBody] CheckoutRequest request)
     {
-        var result = await BuildCheckoutResult(request, commit: true);
+        var validationError = ValidateCheckoutRequest(request, requirePaymentMethod: true);
+        if (validationError != null) return BadRequest(new { message = validationError });
+
+        CheckoutResult result;
+        try
+        {
+            result = await BuildCheckoutResult(request, commit: true);
+        }
+        catch (CheckoutValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
         if (result.TransactionId == null) return BadRequest(new { message = "Checkout failed" });
         var transaction = await _transactionService.GetByIdAsync(result.TransactionId.Value);
         if (transaction == null) return NotFound(new { message = "Transaction not found" });
@@ -140,7 +166,7 @@ public class TransactionController : ControllerBase
     }
 
     [HttpPost("{id:int}/void")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<IActionResult> Void(int id)
     {
         var success = await _transactionService.VoidAsync(id);
@@ -160,103 +186,114 @@ public class TransactionController : ControllerBase
         return Ok(new { message = "Transaction voided successfully" });
     }
 
+    [HttpGet("{id:int}/receipt")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
+    public async Task<ActionResult<object>> Receipt(int id)
+    {
+        var transaction = await _transactionService.GetByIdAsync(id);
+        if (transaction == null) return NotFound(new { message = "Transaction not found" });
+
+        var settings = await _context.Settings
+            .AsNoTracking()
+            .Where(s => s.Key == "store_name" || s.Key == "store_address")
+            .ToDictionaryAsync(s => s.Key, s => s.Value ?? "");
+
+        return Ok(new
+        {
+            transaction,
+            store = new
+            {
+                name = settings.GetValueOrDefault("store_name", "Koperasi"),
+                address = settings.GetValueOrDefault("store_address", "")
+            }
+        });
+    }
+
     private async Task<CheckoutResult> BuildCheckoutResult(CheckoutRequest request, bool commit)
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var staffId = int.TryParse(userId, out var sid) ? sid : (int?)null;
-
-        // Load every cart line's item in ONE query. Previously this loop made
-        // one FindAsync per line — and the commit path re-queried each item a
-        // second time — so a 10-item sale issued 20+ sequential DB round trips.
+        var staffId = User.GetUserId();
         var itemIds = request.Items.Select(l => l.ItemId).Distinct().ToList();
-        var itemsById = itemIds.Count == 0
-            ? new Dictionary<int, Models.Item>()
-            : await _context.Items
-                .Where(i => itemIds.Contains(i.Id))
-                .ToDictionaryAsync(i => i.Id);
+        var itemsById = await _context.Items
+            .Where(i => itemIds.Contains(i.Id))
+            .ToDictionaryAsync(i => i.Id);
 
-        var lines = new List<dynamic>();
+        var lines = new List<CheckoutLine>();
         decimal subtotal = 0;
+        var warnings = new List<string>();
 
         foreach (var line in request.Items)
         {
-            if (!itemsById.TryGetValue(line.ItemId, out var item)) continue;
+            if (!itemsById.TryGetValue(line.ItemId, out var item) || !item.IsActive)
+                throw new CheckoutValidationException($"Item #{line.ItemId} is not available.");
 
-            var unitPrice = (decimal)(item.Price ?? 0);
-            var qty = line.Quantity;
-            var lineSubtotal = unitPrice * qty;
+            if ((item.Stock ?? 0) < line.Quantity)
+                warnings.Add($"Only {item.Stock ?? 0} × \"{item.Name}\" in stock.");
+
+            var unitPrice = item.Price ?? 0;
+            var lineSubtotal = Math.Round(unitPrice * line.Quantity, 2);
             subtotal += lineSubtotal;
-
-            lines.Add(new
+            lines.Add(new CheckoutLine
             {
-                item_id = item.Id,
-                name = item.Name,
-                quantity = qty,
-                unit_price = unitPrice,
-                subtotal = lineSubtotal
+                ItemId = item.Id,
+                Name = item.Name,
+                CategoryId = item.CategoryId,
+                Quantity = line.Quantity,
+                UnitPrice = unitPrice,
+                Subtotal = lineSubtotal
             });
         }
+        subtotal = Math.Round(subtotal, 2);
 
-        // Resolve member
         Models.Member? member = null;
-        if (!string.IsNullOrEmpty(request.MemberIdentifier))
+        if (!string.IsNullOrWhiteSpace(request.MemberIdentifier))
         {
-            member = await _context.Members
-                .FirstOrDefaultAsync(m => m.Identifier == request.MemberIdentifier ||
-                    m.Phone == request.MemberIdentifier ||
-                    m.Email == request.MemberIdentifier);
+            var identifier = request.MemberIdentifier.Trim();
+            member = await _context.Members.FirstOrDefaultAsync(m =>
+                m.Identifier == identifier || m.Phone == identifier || m.Email == identifier);
+            if (member == null || !member.IsActive)
+                throw new CheckoutValidationException("No active member matches that ID, email, or phone.");
         }
 
-        // Resolve discount — fetch only the rows that can actually apply,
-        // instead of loading the entire active-discounts table.
+        var now = DateTime.UtcNow;
+        var discounts = await _context.Discounts
+            .Include(d => d.Category)
+            .Where(d => d.IsActive &&
+                (d.StartDate == null || d.StartDate <= now) &&
+                (d.EndDate == null || d.EndDate >= now) &&
+                (d.Scope != "member" || member != null))
+            .Where(d => !request.DiscountId.HasValue || d.Id == request.DiscountId.Value)
+            .ToListAsync();
+
         Models.Discount? discount = null;
         decimal discountAmount = 0;
-        if (request.DiscountId.HasValue)
+        foreach (var candidate in discounts)
         {
-            discount = await _context.Discounts
-                .Include(d => d.Category)
-                .FirstOrDefaultAsync(d => d.Id == request.DiscountId.Value && d.IsActive);
-        }
-        else if (member != null)
-        {
-            discount = await _context.Discounts
-                .Include(d => d.Category)
-                .Where(d => d.IsActive && d.Scope == "member")
-                .OrderBy(d => d.Id)
-                .FirstOrDefaultAsync();
-        }
-
-        if (discount != null)
-        {
-            if (discount.Type == "percentage")
+            if (candidate.MinPurchase.HasValue && subtotal < candidate.MinPurchase.Value) continue;
+            var candidateAmount = ComputeDiscountAmount(candidate, lines, subtotal);
+            if (candidateAmount > discountAmount)
             {
-                discountAmount = Math.Round(subtotal * (decimal)(discount.DiscountRate) / 100, 2);
+                discount = candidate;
+                discountAmount = candidateAmount;
             }
-            else if (discount.Type == "flat")
-            {
-                discountAmount = (decimal)(discount.DiscountRate);
-            }
-            // buy_x_get_y — simplified: skip for preview, apply in checkout
         }
+        discountAmount = Math.Min(Math.Round(discountAmount, 2), subtotal);
 
-        // Tax rate from settings — cached briefly (queries hit this row on
-        // every preview keystroke debounce and checkout otherwise).
+        if (member == null && !request.DiscountId.HasValue &&
+            await _context.Discounts.AnyAsync(d => d.IsActive && d.Scope == "member" &&
+                (d.StartDate == null || d.StartDate <= now) && (d.EndDate == null || d.EndDate >= now)))
+            warnings.Add("A member discount is available — add a member to apply it.");
+
         var taxRate = await GetTaxRateAsync();
-        var taxableAmount = subtotal - discountAmount;
+        var taxableAmount = Math.Max(subtotal - discountAmount, 0);
         var taxAmount = Math.Round(taxableAmount * taxRate, 2);
-        var total = subtotal - discountAmount + taxAmount;
+        var total = Math.Round(taxableAmount + taxAmount, 2);
 
         if (commit)
         {
-            // Concurrency safety: GenerateTransactionNumberAsync is count-based,
-            // so two simultaneous checkouts can compute the same TRX- code.
-            // Serialize allocation with a MySQL advisory lock held across
-            // number generation + insert, with a bounded retry as backstop
-            // (transaction_code has a UNIQUE index that would otherwise 500).
-            const int maxAttempts = 4;
+            const int maxAttempts = 6;
             for (var attempt = 1; ; attempt++)
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
                 var lockAcquired = await AcquireTrxNumberLockAsync();
 
                 try
@@ -267,15 +304,15 @@ public class TransactionController : ControllerBase
                         TransactionNumber = txnNumber,
                         MemberId = member?.Id,
                         UserId = staffId,
+                        DiscountId = discount?.Id,
                         Type = "purchase",
                         Subtotal = subtotal,
                         DiscountAmount = discountAmount,
                         TaxAmount = taxAmount,
                         TotalAmount = total,
-                        PaymentMethod = request.PaymentMethod ?? "cash",
+                        PaymentMethod = request.PaymentMethod,
                         PaymentStatus = "paid",
                         PaidAt = DateTime.UtcNow,
-                        Notes = request.Notes,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     };
@@ -283,29 +320,49 @@ public class TransactionController : ControllerBase
                     _context.Transactions.Add(dbTransaction);
                     await _context.SaveChangesAsync();
 
-                    foreach (var line in request.Items)
+                    foreach (var line in lines)
                     {
-                        if (!itemsById.TryGetValue(line.ItemId, out var item)) continue;
-
-                        var unitPrice = (decimal)(item.Price ?? 0);
                         _context.TransactionItems.Add(new TransactionItem
                         {
                             TransactionId = dbTransaction.Id,
-                            ItemId = item.Id,
+                            ItemId = line.ItemId,
                             Quantity = line.Quantity,
-                            Price = unitPrice,
-                            Subtotal = unitPrice * line.Quantity,
+                            Price = line.UnitPrice,
+                            Subtotal = line.Subtotal,
                             CreatedAt = DateTime.UtcNow
                         });
 
-                        // Atomic delta: concurrent tills must not overwrite
-                        // each other's deduction (absolute writes lose updates).
-                        await _context.Items
-                            .Where(i => i.Id == item.Id)
-                            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Stock, i => i.Stock - line.Quantity));
+                        // The stock predicate makes the decrement safe when
+                        // two cashiers sell the last units at the same time.
+                        var changed = await _context.Items
+                            .Where(i => i.Id == line.ItemId && i.IsActive && (i.Stock ?? 0) >= line.Quantity)
+                            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Stock, i => (i.Stock ?? 0) - line.Quantity));
+                        if (changed != 1)
+                            throw new CheckoutValidationException($"Not enough stock for \"{line.Name}\".");
+                    }
+
+                    if (member != null)
+                    {
+                        var shuRate = await GetShuRateAsync();
+                        member.ShuBalance += Math.Round(total * shuRate, 2);
                     }
 
                     await _context.SaveChangesAsync();
+                    await _auditLogService.CreateAsync(new AuditLog
+                    {
+                        UserId = staffId,
+                        UserType = "staff",
+                        Action = "checkout",
+                        EntityType = "transaction",
+                        EntityId = dbTransaction.Id,
+                        Details = System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            total,
+                            payment_method = request.PaymentMethod,
+                            member_id = member?.Id
+                        }),
+                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
+                    });
                     await transaction.CommitAsync();
 
                     return new CheckoutResult
@@ -315,13 +372,15 @@ public class TransactionController : ControllerBase
                         Total = total
                     };
                 }
-                catch (DbUpdateException ex) when (attempt < maxAttempts && IsDuplicateKey(ex))
+                catch (Exception ex) when (attempt < maxAttempts && IsRetryableCheckoutException(ex))
                 {
-                    // Sweep the failed attempt away, back off briefly (lets the
-                    // winner's count commit), then retry with a fresh number.
+                    // MySQL can deadlock the transaction-row insert against
+                    // the item update under simultaneous tills. The whole
+                    // transaction is rolled back by disposal above; detach
+                    // tracked entities before retrying on a clean context.
                     foreach (var entry in _context.ChangeTracker.Entries().ToList())
                         entry.State = EntityState.Detached;
-                    await Task.Delay(Random.Shared.Next(25, 75));
+                    await Task.Delay(Random.Shared.Next(25, 100));
                 }
                 finally
                 {
@@ -330,14 +389,28 @@ public class TransactionController : ControllerBase
             }
         }
 
-        var warnings = new List<string>();
-        if (discount != null && discount.Scope == "member" && member == null)
-        {
-            warnings.Add("A member discount is available — add a member to apply it.");
-        }
-
-        var discountObj = discount != null ? new { name = discount.Name, type = discount.Type, value = discount.DiscountRate } : null;
-        var memberObj = member != null ? new { id = member.Id, name = member.Name, membership_id = member.Identifier } : null;
+        var discountObj = discount == null
+            ? null
+            : new
+            {
+                id = discount.Id,
+                name = discount.Name,
+                description = discount.Description,
+                type = discount.Type,
+                value = discount.DiscountRate,
+                buy_qty = discount.BuyQty,
+                get_qty = discount.GetQty,
+                scope = discount.Scope,
+                category_id = discount.CategoryId,
+                category = discount.Category,
+                min_purchase = discount.MinPurchase,
+                is_active = discount.IsActive,
+                starts_at = discount.StartDate,
+                ends_at = discount.EndDate
+            };
+        var memberObj = member != null
+            ? new { id = member.Id, name = member.Name, membership_id = member.Identifier }
+            : null;
 
         return new CheckoutResult
         {
@@ -351,6 +424,48 @@ public class TransactionController : ControllerBase
             Member = memberObj,
             Warnings = warnings
         };
+    }
+
+    private static string? ValidateCheckoutRequest(CheckoutRequest request, bool requirePaymentMethod)
+    {
+        if (request.Items == null || request.Items.Count == 0)
+            return "At least one item is required.";
+        if (request.Items.Any(i => i.ItemId <= 0 || i.Quantity < 1))
+            return "Each item must have a positive item ID and quantity.";
+        if (requirePaymentMethod && request.PaymentMethod is not ("cash" or "qris" or "bank_transfer"))
+            return "Payment method must be cash, qris, or bank_transfer.";
+        return null;
+    }
+
+    private static decimal ComputeDiscountAmount(Models.Discount discount, IEnumerable<CheckoutLine> lines, decimal subtotal)
+    {
+        return discount.Type switch
+        {
+            "percentage" => subtotal * discount.DiscountRate / 100,
+            "flat" or "fixed" => Math.Min(discount.DiscountRate, subtotal),
+            "buy_x_get_y" => ComputeBogoAmount(discount, lines),
+            _ => 0
+        };
+    }
+
+    private static decimal ComputeBogoAmount(Models.Discount discount, IEnumerable<CheckoutLine> lines)
+    {
+        if (!discount.BuyQty.HasValue || !discount.GetQty.HasValue || discount.BuyQty <= 0 || discount.GetQty <= 0)
+            return 0;
+        var groupSize = discount.BuyQty.Value + discount.GetQty.Value;
+        return lines
+            .Where(l => !discount.CategoryId.HasValue || l.CategoryId == discount.CategoryId)
+            .Sum(l => (decimal)(l.Quantity / groupSize * discount.GetQty.Value) * l.UnitPrice);
+    }
+
+    private async Task<decimal> GetShuRateAsync()
+    {
+        var value = await _context.Settings
+            .AsNoTracking()
+            .Where(s => s.Key == "shu_rate")
+            .Select(s => s.Value)
+            .FirstOrDefaultAsync();
+        return decimal.TryParse(value, out var rate) ? rate : 0.02m;
     }
 
     /// <summary>
@@ -376,8 +491,16 @@ public class TransactionController : ControllerBase
         return decimal.TryParse(value ?? "0", out var rate) ? rate / 100 : 0;
     }
 
-    private static bool IsDuplicateKey(DbUpdateException ex)
-        => ex.InnerException is MySqlConnector.MySqlException { Number: 1062 };
+    private static bool IsRetryableCheckoutException(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException!)
+        {
+            if (current is MySql.Data.MySqlClient.MySqlException mysql &&
+                (mysql.Number == 1062 || mysql.Number == 1205 || mysql.Number == 1213))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// MySQL advisory lock serializing transaction-number allocation across
@@ -428,7 +551,7 @@ public class CheckoutResult
     public int? TransactionId { get; set; }
     public string? TransactionCode { get; set; }
     public decimal? Total { get; set; }
-    public List<dynamic>? Lines { get; set; }
+    public object? Lines { get; set; }
     public decimal? Subtotal { get; set; }
     public object? Discount { get; set; }
     public decimal? DiscountAmount { get; set; }
@@ -436,4 +559,19 @@ public class CheckoutResult
     public decimal? TaxAmount { get; set; }
     public object? Member { get; set; }
     public List<string>? Warnings { get; set; }
+}
+
+internal sealed class CheckoutValidationException : Exception
+{
+    public CheckoutValidationException(string message) : base(message) { }
+}
+
+internal sealed class CheckoutLine
+{
+    public int ItemId { get; init; }
+    public string Name { get; init; } = null!;
+    public int? CategoryId { get; init; }
+    public int Quantity { get; init; }
+    public decimal UnitPrice { get; init; }
+    public decimal Subtotal { get; init; }
 }

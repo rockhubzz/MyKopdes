@@ -108,6 +108,33 @@ public class OwnerLoanController : ControllerBase
         {
             return NotFound(new { message = "Loan not found" });
         }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:int}/activate")]
+    [Authorize(Roles = "shop_owner,admin")]
+    public async Task<ActionResult<Loan>> Activate(int id)
+    {
+        try
+        {
+            var loan = await _loanService.ActivateAsync(id);
+            return Ok(loan);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Loan not found" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("{id:int}/write-off")]

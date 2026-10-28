@@ -73,6 +73,28 @@ public class RestockService : IRestockService
             .ToListAsync();
     }
 
+    public async Task<(List<RestockingRecord> Records, int Total)> GetPagedAsync(
+        int page, int pageSize, int? itemId = null, int? userId = null)
+    {
+        var query = _context.RestockingRecords
+            .Include(r => r.Item)
+            .Include(r => r.Supplier)
+            .Include(r => r.User)
+            .AsQueryable();
+
+        if (itemId.HasValue) query = query.Where(r => r.ItemId == itemId.Value);
+        if (userId.HasValue) query = query.Where(r => r.UserId == userId.Value);
+
+        var total = await query.CountAsync();
+        var records = await query
+            .OrderByDescending(r => r.CreatedAt)
+            .Skip(Math.Max(0, page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (records, total);
+    }
+
     public async Task<decimal> GetTotalRestockCostAsync(DateTime? from = null, DateTime? to = null)
     {
         var query = _context.RestockingRecords.AsQueryable();

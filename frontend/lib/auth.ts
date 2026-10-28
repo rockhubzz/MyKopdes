@@ -10,7 +10,14 @@ import type { Member, Role, StaffRole, StaffUser } from './types';
 // own API origin over the Authorization header, never read by other sites.
 const TOKEN_COOKIE = 'koperasi_token';
 const ROLE_COOKIE = 'koperasi_role';
-const COOKIE_OPTS = { expires: 1, sameSite: 'lax' as const, path: '/' };
+// Secure flag prevents the cookie from being sent over plain HTTP (when TLS
+// is enabled). SameSite=lax blocks cross-site request forgery.
+const COOKIE_OPTS = {
+  expires: 1,
+  sameSite: 'lax' as const,
+  path: '/',
+  secure: typeof window !== 'undefined' && window.location.protocol === 'https:',
+};
 
 export function setSession(token: string, role: Role) {
   Cookies.set(TOKEN_COOKIE, token, COOKIE_OPTS);

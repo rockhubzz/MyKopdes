@@ -32,6 +32,13 @@ export default function MemberLoansPage() {
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const { t, tx } = useLanguage();
 
+  // What the member still owes — server-computed remaining with a fallback.
+  function remainingOf(l: Loan): number {
+    if (l.remaining_amount !== undefined && l.remaining_amount !== null)
+      return Number(l.remaining_amount);
+    return Number(l.outstanding_balance) - Number(l.total_paid ?? 0);
+  }
+
   function load() {
     apiFetch<MemberLoanIndex>('/member/loans')
       .then((res) => {
@@ -47,7 +54,7 @@ export default function MemberLoansPage() {
   function statValue(): string {
     const total = loans
       .filter((l) => l.status !== 'paid_off' && l.status !== 'written_off' && l.status !== 'rejected' && l.status !== 'draft')
-      .reduce((sum, l) => sum + Number(l.outstanding_balance), 0);
+      .reduce((sum, l) => sum + remainingOf(l), 0);
     return `Rp ${total.toLocaleString('id-ID')}`;
   }
 
@@ -140,7 +147,7 @@ export default function MemberLoansPage() {
                   </span>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="font-medium">Rp {Number(l.outstanding_balance).toLocaleString('id-ID')}</div>
+                  <div className="font-medium">Rp {remainingOf(l).toLocaleString('id-ID')}</div>
                   {l.due_at && (
                     <div className="text-xs text-koperasi-400">
                       {t('memberLoans.dueDate')}: {new Date(l.due_at).toLocaleDateString('id-ID')}

@@ -8,12 +8,9 @@ namespace MyKopdes.Data;
 // Laravel migrations and remains untouched by the .NET backend.
 public class KoperasiDbContext : DbContext
 {
-    // Fixed server version — avoids a live MySQL connection just to detect
-    // the version at startup (which made bootup fail if MySQL was briefly
-    // unreachable). Matches the mysql:8.0 image used by the docker stack.
-    public static readonly MySqlServerVersion FixedServerVersion =
-        new MySqlServerVersion(new Version(8, 0, 36));
-
+    // No live version detection at startup. The provider version used by
+    // MySql.EntityFrameworkCore is fixed; the docker stack still runs on
+    // mysql:8.0.
     public KoperasiDbContext(DbContextOptions<KoperasiDbContext> options)
         : base(options) { }
 
@@ -156,6 +153,7 @@ public class KoperasiDbContext : DbContext
             entity.Property(e => e.TransactionNumber).HasColumnName("transaction_code");
             entity.Property(e => e.MemberId).HasColumnName("member_id");
             entity.Property(e => e.UserId).HasColumnName("cashier_id");
+            entity.Property(e => e.DiscountId).HasColumnName("discount_id");
             entity.Ignore(e => e.Type);
             entity.Property(e => e.Subtotal).HasColumnName("subtotal").HasColumnType("decimal(12,2)");
             entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount").HasColumnType("decimal(12,2)");
@@ -308,6 +306,18 @@ public class KoperasiDbContext : DbContext
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
         });
 
+        modelBuilder.Entity<Supplier>()
+            .HasMany(s => s.RestockingRecords)
+            .WithOne(r => r.Supplier)
+            .HasForeignKey(r => r.SupplierId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<Transaction>()
+            .HasOne(t => t.Discount)
+            .WithMany()
+            .HasForeignKey(t => t.DiscountId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Setting -> settings table
         modelBuilder.Entity<Setting>(entity =>
         {
@@ -366,12 +376,14 @@ public class KoperasiDbContext : DbContext
 
     // Override to prevent migrations from being used
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
         {
-            var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
-                ?? "server=mysql;port=3306;database=koperasi;user=koperasi;password=koperasi_secret;SslMode=none;AllowPublicKeyRetrieval=true";
-            optionsBuilder.UseMySql(connectionString, FixedServerVersion);
+            if (!optionsBuilder.IsConfigured)
+            {
+                var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+                if (string.IsNullOrEmpty(connectionString))
+                    throw new InvalidOperationException(
+                        "FATAL: DB_CONNECTION_STRING environment variable is not set.");
+                optionsBuilder.UseMySQL(connectionString);
+            }
         }
-    }
 }

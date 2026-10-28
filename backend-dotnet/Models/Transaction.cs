@@ -13,6 +13,10 @@ public class Transaction
     public int? UserId { get; set; }              // cashier_id
     [System.Text.Json.Serialization.JsonPropertyName("cashier")]
     public User? User { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("discount_id")]
+    public int? DiscountId { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("discount")]
+    public Discount? Discount { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
     public string Type { get; set; } = null!;     // not in DB; for API compatibility
     public decimal? Subtotal { get; set; }         // subtotal

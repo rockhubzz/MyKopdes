@@ -18,10 +18,12 @@ public class SupplierService : ISupplierService
         var query = _context.Suppliers.AsQueryable();
         if (!string.IsNullOrEmpty(search))
         {
-            query = query.Where(s => s.Name.Contains(search) || (s.Phone != null && s.Phone.Contains(search)));
+            query = query.Where(s => s.Name.Contains(search) ||
+                (s.ContactPerson != null && s.ContactPerson.Contains(search)) ||
+                (s.Phone != null && s.Phone.Contains(search)));
         }
         return await query
-            .OrderByDescending(s => s.CreatedAt)
+            .OrderBy(s => s.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -29,7 +31,10 @@ public class SupplierService : ISupplierService
 
     public async Task<Supplier?> GetByIdAsync(int id)
     {
-        return await _context.Suppliers.FindAsync(id);
+        return await _context.Suppliers
+            .Include(s => s.RestockingRecords!.OrderByDescending(r => r.CreatedAt).Take(10))
+            .ThenInclude(r => r.Item)
+            .FirstOrDefaultAsync(s => s.Id == id);
     }
 
     public async Task<Supplier> CreateAsync(Supplier supplier)
@@ -62,6 +67,8 @@ public class SupplierService : ISupplierService
     {
         var supplier = await _context.Suppliers.FindAsync(id);
         if (supplier == null) return false;
+        if (await _context.RestockingRecords.AnyAsync(r => r.SupplierId == id))
+            throw new InvalidOperationException("Cannot delete a supplier with restocking history.");
         _context.Suppliers.Remove(supplier);
         await _context.SaveChangesAsync();
         return true;
@@ -70,7 +77,9 @@ public class SupplierService : ISupplierService
     public async Task<List<Supplier>> SearchAsync(string query)
     {
         return await _context.Suppliers
-            .Where(s => s.Name.Contains(query) || (s.Phone != null && s.Phone.Contains(query)))
+            .Where(s => s.Name.Contains(query) ||
+                (s.ContactPerson != null && s.ContactPerson.Contains(query)) ||
+                (s.Phone != null && s.Phone.Contains(query)))
             .ToListAsync();
     }
 

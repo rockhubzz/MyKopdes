@@ -71,11 +71,6 @@ public class MemberProfileController : ControllerBase
         var member = await _memberService.GetByMemberIdAsync(userId.Value);
         if (member == null) return NotFound(new { message = "Member not found" });
 
-        var today = DateTime.UtcNow.Date;
-        var transactions = await _context.Transactions
-            .Where(t => t.MemberId == member.Id && t.CreatedAt >= today && t.CreatedAt < today.AddDays(1))
-            .ToListAsync();
-
         var recentTransactions = await _context.Transactions
             .Where(t => t.MemberId == member.Id)
             .OrderByDescending(t => t.CreatedAt)
@@ -92,11 +87,11 @@ public class MemberProfileController : ControllerBase
             .ToListAsync();
 
         var totalPurchases = await _context.Transactions
-            .Where(t => t.MemberId == member.Id)
+            .Where(t => t.MemberId == member.Id && t.PaymentStatus == "paid")
             .CountAsync();
 
         var totalSpent = await _context.Transactions
-            .Where(t => t.MemberId == member.Id)
+            .Where(t => t.MemberId == member.Id && t.PaymentStatus == "paid")
             .SumAsync(t => (decimal)(t.TotalAmount ?? 0));
 
         return Ok(new
@@ -134,13 +129,27 @@ public class MemberProfileController : ControllerBase
 
         var form = await Request.ReadFormAsync();
 
-        if (!string.IsNullOrEmpty(form["name"])) member.Name = form["name"];
-        if (!string.IsNullOrEmpty(form["phone"])) member.Phone = form["phone"];
-        if (!string.IsNullOrEmpty(form["address"])) member.Address = form["address"];
-        if (!string.IsNullOrEmpty(form["email"])) member.Email = form["email"];
-        if (!string.IsNullOrEmpty(form["locale"])) member.Locale = form["locale"];
+        if (form.ContainsKey("name")) member.Name = form["name"].ToString().Trim();
+        if (form.ContainsKey("phone"))
+        {
+            var phone = form["phone"].ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(phone) && await _context.Members.AnyAsync(m => m.Id != member.Id && m.Phone == phone))
+                return Conflict(new { message = "Phone already in use" });
+            member.Phone = string.IsNullOrWhiteSpace(phone) ? null : phone;
+        }
+        if (form.ContainsKey("address")) member.Address = string.IsNullOrWhiteSpace(form["address"].ToString()) ? null : form["address"].ToString();
+        if (form.ContainsKey("email"))
+        {
+            var email = form["email"].ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(email) && await _context.Members.AnyAsync(m => m.Id != member.Id && m.Email == email))
+                return Conflict(new { message = "Email already in use" });
+            member.Email = string.IsNullOrWhiteSpace(email) ? null : email;
+        }
+        if (form.ContainsKey("locale") && (form["locale"] == "en" || form["locale"] == "id")) member.Locale = form["locale"];
         if (!string.IsNullOrEmpty(form["password"]))
         {
+            if (form["password"].ToString().Length < 8)
+                return BadRequest(new { message = "Password must be at least 8 characters" });
             member.Password = BCrypt.Net.BCrypt.HashPassword(form["password"]);
         }
 
@@ -155,7 +164,7 @@ public class MemberProfileController : ControllerBase
             _fileUploads.DeleteStoredImage(member.Avatar);
             member.Avatar = saved;
         }
-        else if (form["remove_avatar"] == "1")
+        else if (form["remove_avatar"] == "1" || form["remove_avatar"] == "true")
         {
             _fileUploads.DeleteStoredImage(member.Avatar);
             member.Avatar = null;

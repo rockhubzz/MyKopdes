@@ -47,7 +47,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Supplier>> Create([FromBody] Supplier supplier)
     {
         var created = await _supplierService.CreateAsync(supplier);
@@ -55,7 +55,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Supplier>> Update(int id, [FromBody] Supplier supplier)
     {
         try
@@ -70,12 +70,19 @@ public class SupplierController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<IActionResult> Delete(int id)
     {
-        var success = await _supplierService.DeleteAsync(id);
-        if (!success) return NotFound(new { message = "Supplier not found" });
-        return Ok(new { message = "Supplier deleted successfully" });
+        try
+        {
+            var success = await _supplierService.DeleteAsync(id);
+            if (!success) return NotFound(new { message = "Supplier not found" });
+            return Ok(new { message = "Supplier deleted successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
     }
 
     [HttpGet("search/{query}")]

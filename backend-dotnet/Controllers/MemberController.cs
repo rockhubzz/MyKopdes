@@ -20,7 +20,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<PaginatedResponse<MemberModel>>> Get(
         [FromQuery] int page = 1,
         [FromQuery(Name = "per_page")] int pageSize = 15,
@@ -41,7 +41,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<MemberModel>> GetById(int id)
     {
         var member = await _memberService.GetByIdAsync(id);
@@ -50,14 +50,21 @@ public class MemberController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<MemberModel>> Create([FromBody] MemberCreateRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "Name and password are required" });
+        if (!string.IsNullOrWhiteSpace(request.Email) && await _memberService.GetByEmailAsync(request.Email.Trim()) != null)
+            return Conflict(new { message = "Email already in use" });
+        if (!string.IsNullOrWhiteSpace(request.Phone) && await _memberService.GetByIdentifierAsync(request.Phone.Trim()) != null)
+            return Conflict(new { message = "Phone already in use" });
+
         var member = new MemberModel
         {
-            Name = request.Name,
-            Email = request.Email,
-            Phone = request.Phone,
+            Name = request.Name.Trim(),
+            Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim(),
+            Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
             Address = request.Address,
             IsActive = true,
             Password = request.Password != null ? BCrypt.Net.BCrypt.HashPassword(request.Password) : string.Empty,
@@ -72,7 +79,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<MemberModel>> Update(int id, [FromBody] MemberUpdateRequest request)
     {
         try
@@ -80,10 +87,24 @@ public class MemberController : ControllerBase
             var existing = await _memberService.GetByIdAsync(id);
             if (existing == null) return NotFound(new { message = "Member not found" });
 
-            if (!string.IsNullOrEmpty(request.Name)) existing.Name = request.Name;
-            if (!string.IsNullOrEmpty(request.Email)) existing.Email = request.Email;
-            if (!string.IsNullOrEmpty(request.Phone)) existing.Phone = request.Phone;
-            if (!string.IsNullOrEmpty(request.Address)) existing.Address = request.Address;
+            if (request.Name != null) existing.Name = request.Name.Trim();
+            if (request.Email != null)
+            {
+                var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+                var duplicate = email == null ? null : await _memberService.GetByEmailAsync(email);
+                if (duplicate != null && duplicate.Id != id)
+                    return Conflict(new { message = "Email already in use" });
+                existing.Email = email;
+            }
+            if (request.Phone != null)
+            {
+                var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+                var duplicate = phone == null ? null : await _memberService.GetByIdentifierAsync(phone);
+                if (duplicate != null && duplicate.Id != id)
+                    return Conflict(new { message = "Phone already in use" });
+                existing.Phone = phone;
+            }
+            if (request.Address != null) existing.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address;
             if (request.IsActive.HasValue) existing.IsActive = request.IsActive.Value;
             if (!string.IsNullOrEmpty(request.Locale)) existing.Locale = request.Locale;
             if (!string.IsNullOrEmpty(request.Password)) existing.Password = BCrypt.Net.BCrypt.HashPassword(request.Password);
@@ -98,16 +119,23 @@ public class MemberController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
-        var success = await _memberService.DeleteAsync(id, force != 0);
-        if (!success) return NotFound(new { message = "Member not found" });
-        return Ok(new { message = "Member deleted successfully" });
+        try
+        {
+            var success = await _memberService.DeleteAsync(id, force != 0);
+            if (!success) return NotFound(new { message = "Member not found" });
+            return Ok(new { message = "Member deleted successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
     }
 
     [HttpGet("search/{query}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<IEnumerable<MemberModel>>> Search(string query)
     {
         var members = await _memberService.SearchAsync(query);
@@ -115,7 +143,7 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet("count")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<object>> GetCount()
     {
         var count = await _memberService.GetTotalCountAsync();
@@ -123,10 +151,11 @@ public class MemberController : ControllerBase
     }
 
     [HttpGet("lookup")]
-    [Authorize]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public async Task<ActionResult<IEnumerable<MemberModel>>> Lookup([FromQuery] string query)
     {
-        var members = await _memberService.SearchAsync(query);
+        if (string.IsNullOrWhiteSpace(query)) return BadRequest(new { message = "Query is required" });
+        var members = await _memberService.LookupAsync(query);
         return Ok(members);
     }
 }

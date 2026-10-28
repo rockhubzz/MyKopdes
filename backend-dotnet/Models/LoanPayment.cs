@@ -11,6 +11,9 @@ public class LoanPayment
     public int? UserId { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
     public User? User { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("recordedBy")]
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public User? RecordedBy => User;
     public decimal? Amount { get; set; }
     public decimal? InterestAmount { get; set; } = 0;
     public decimal? PrincipalAmount { get; set; } = 0;

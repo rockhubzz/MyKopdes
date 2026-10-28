@@ -11,6 +11,7 @@ public interface ILoanService
     Task<Loan> CreateAsync(Loan loan);
     Task<Loan> UpdateAsync(int id, Loan loan);
     Task<Loan> ApproveAsync(int id, int userId);
+    Task<Loan> ActivateAsync(int id);
     Task<Loan> RejectAsync(int id, string? reason = null);
     Task<Loan> AddPaymentAsync(int loanId, decimal amount, int? userId = null, string? notes = null, string? paymentMethod = null);
     Task<Loan> WriteOffAsync(int id, string? reason = null);

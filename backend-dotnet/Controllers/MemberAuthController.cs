@@ -5,6 +5,8 @@ using MyKopdes.Models.DTOs;
 using MyKopdes.Services;
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
+using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace MyKopdes.Controllers;
 
@@ -35,19 +37,27 @@ public class MemberAuthController : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<MemberLoginResponse>> Register([FromBody] MemberRegisterRequest request)
     {
-        var existing = await _memberService.GetByIdentifierAsync(request.Identifier);
-        if (existing != null)
-            return BadRequest(new { message = "Member with this identifier already exists" });
+        var phone = request.Phone!.Trim();
+        var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+        var requestedIdentifier = string.IsNullOrWhiteSpace(request.Identifier) ? null : request.Identifier.Trim();
 
-        var pinHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+        if (await _memberService.GetByIdentifierAsync(phone) != null ||
+            (requestedIdentifier != null && await _memberService.GetByIdentifierAsync(requestedIdentifier) != null))
+            return Conflict(new { message = "A member with this phone or membership ID already exists" });
+
+        if (email != null && await _memberService.GetByEmailAsync(email) != null)
+            return Conflict(new { message = "A member with this email already exists" });
+
         var member = new MemberModel
         {
-            Name = request.Name,
-            Identifier = request.Identifier,
-            Phone = request.Phone,
+            Name = request.Name.Trim(),
+            // Leave this empty for self-signup so MemberService generates the
+            // official KOP-yyMM-NNNN membership ID atomically.
+            Identifier = requestedIdentifier,
+            Phone = phone,
             Address = request.Address,
-            Email = request.Email,
-            Password = pinHash,
+            Email = email,
+            Password = request.Password,
             ShuBalance = 0,
             IsActive = true,
             Locale = "en",
@@ -55,14 +65,26 @@ public class MemberAuthController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         };
 
-        var created = await _memberService.CreateAsync(member);
-        var result = await _authService.MemberLoginAsync(request.Identifier, request.Password);
+        MemberModel created;
+        try
+        {
+            created = await _memberService.CreateAsync(member);
+        }
+        catch (DbUpdateException)
+        {
+            // Keep unique phone/email races user-readable instead of exposing
+            // a database error if two signups arrive at the same time.
+            return Conflict(new { message = "A member with these details already exists" });
+        }
+
+        var result = await _authService.MemberLoginAsync(created.Identifier!, request.Password);
         if (result == null)
             return BadRequest(new { message = "Failed to login after registration" });
         return Ok(result);
     }
 
-    [HttpPost("me")]
+    [HttpGet("me")]
+    [HttpPost("me")] // legacy .NET client compatibility; Laravel uses GET
     [Authorize(Roles = "member")]
     public async Task<ActionResult<object>> Me()
     {
@@ -90,10 +112,15 @@ public class MemberAuthController : ControllerBase
 
 public class MemberRegisterRequest
 {
+    [Required, StringLength(255, MinimumLength = 2)]
     public string Name { get; set; } = null!;
-    public string Identifier { get; set; } = null!;
+    public string? Identifier { get; set; }
+    [Required, StringLength(255, MinimumLength = 8)]
     public string Password { get; set; } = null!;
-    public string? Phone { get; set; }
+    [Required, StringLength(255, MinimumLength = 6)]
+    public string Phone { get; set; } = null!;
+    [StringLength(1000)]
     public string? Address { get; set; }
+    [EmailAddress, StringLength(255)]
     public string? Email { get; set; }
 }

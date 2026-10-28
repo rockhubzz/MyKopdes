@@ -44,6 +44,7 @@ public class LoanService : ILoanService
             .Include(l => l.LoanProduct)
             .Include(l => l.User)
             .Include(l => l.Payments)
+            .ThenInclude(p => p.User)
             .FirstOrDefaultAsync(l => l.Id == id);
         if (loan != null) FillRemaining(new[] { loan });
         return loan;
@@ -158,7 +159,7 @@ public class LoanService : ILoanService
             .FirstOrDefaultAsync(l => l.Id == id);
         if (loan == null) throw new KeyNotFoundException("Loan not found");
 
-        loan.Status = "approved";
+        loan.Status = "active"; // approved = disbursed; loan starts progressing right away
         loan.UserId = userId;
         loan.ApprovedAt = DateTime.UtcNow;
         loan.UpdatedAt = DateTime.UtcNow;
@@ -181,14 +182,44 @@ public class LoanService : ILoanService
         return await GetByIdAsync(id) ?? loan;
     }
 
+    public async Task<Loan> ActivateAsync(int id)
+    {
+        var loan = await _context.Loans.FirstOrDefaultAsync(l => l.Id == id);
+        if (loan == null) throw new KeyNotFoundException("Loan not found");
+        if (loan.Status != "approved")
+            throw new InvalidOperationException($"Only approved loans can be activated (loan is '{loan.Status}')");
+
+        loan.Status = "active";
+        loan.UpdatedAt = DateTime.UtcNow;
+
+        _context.Loans.Update(loan);
+        await _context.SaveChangesAsync();
+        return await GetByIdAsync(id) ?? loan;
+    }
+
     public async Task<Loan> AddPaymentAsync(int loanId, decimal amount, int? userId = null, string? notes = null, string? paymentMethod = null)
     {
+        if (amount <= 0)
+            throw new ArgumentException("Payment amount must be greater than zero", nameof(amount));
+
         using var transaction = await _context.Database.BeginTransactionAsync();
 
         var loan = await _context.Loans
             .Include(l => l.Payments)
             .FirstOrDefaultAsync(l => l.Id == loanId);
         if (loan == null) throw new KeyNotFoundException("Loan not found");
+
+        if (loan.Status is "pending" or "draft" or "rejected" or "written_off")
+            throw new InvalidOperationException($"Payments can only be recorded on active loans (loan is '{loan.Status}')");
+
+        // Legacy loans approved before approval auto-activated move to active
+        // on their first recorded payment.
+        if (loan.Status == "approved")
+            loan.Status = "active";
+
+        var remainingBefore = (loan.TotalAmount ?? 0) - (loan.PaidAmount ?? 0);
+        if (remainingBefore > 0 && amount > remainingBefore)
+            throw new InvalidOperationException($"Payment amount exceeds the remaining balance ({remainingBefore:N2})");
 
         var payment = new LoanPayment
         {

@@ -13,13 +13,16 @@ public class TransactionService : ITransactionService
         _context = context;
     }
 
-    public async Task<List<Transaction>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, string? paymentMethod = null)
+    public async Task<List<Transaction>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, string? paymentMethod = null,
+        DateTime? from = null, DateTime? to = null, int? memberId = null, int? cashierId = null)
     {
         IQueryable<Transaction> query = _context.Transactions
             .AsNoTracking()
             .AsSplitQuery()
             .Include(t => t.Member)
             .Include(t => t.User)
+            .Include(t => t.Discount)
+            .ThenInclude(d => d!.Category)
             .Include(t => t.Items)
             .ThenInclude(ti => ti.Item);
 
@@ -35,6 +38,11 @@ public class TransactionService : ITransactionService
             query = query.Where(t => t.PaymentMethod == paymentMethod);
         }
 
+        if (from.HasValue) query = query.Where(t => t.CreatedAt >= from.Value.Date);
+        if (to.HasValue) query = query.Where(t => t.CreatedAt < to.Value.Date.AddDays(1));
+        if (memberId.HasValue) query = query.Where(t => t.MemberId == memberId.Value);
+        if (cashierId.HasValue) query = query.Where(t => t.UserId == cashierId.Value);
+
         return await query
             .OrderByDescending(t => t.CreatedAt)
             .Skip((page - 1) * pageSize)
@@ -42,7 +50,8 @@ public class TransactionService : ITransactionService
             .ToListAsync();
     }
 
-    public async Task<int> GetTotalCountAsync(string? search = null, string? paymentMethod = null)
+    public async Task<int> GetTotalCountAsync(string? search = null, string? paymentMethod = null,
+        DateTime? from = null, DateTime? to = null, int? memberId = null, int? cashierId = null)
     {
         var query = _context.Transactions.AsQueryable();
 
@@ -58,16 +67,46 @@ public class TransactionService : ITransactionService
             query = query.Where(t => t.PaymentMethod == paymentMethod);
         }
 
+        if (from.HasValue) query = query.Where(t => t.CreatedAt >= from.Value.Date);
+        if (to.HasValue) query = query.Where(t => t.CreatedAt < to.Value.Date.AddDays(1));
+        if (memberId.HasValue) query = query.Where(t => t.MemberId == memberId.Value);
+        if (cashierId.HasValue) query = query.Where(t => t.UserId == cashierId.Value);
+
         return await query.CountAsync();
     }
 
     public async Task<bool> VoidAsync(int id)
     {
-        var transaction = await _context.Transactions.FindAsync(id);
+        await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+        var transaction = await _context.Transactions
+            .Include(t => t.Items)
+            .Include(t => t.Member)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (transaction == null) return false;
+        if (transaction.PaymentStatus == "void") return true;
+
+        foreach (var line in transaction.Items)
+        {
+            await _context.Items
+                .Where(i => i.Id == line.ItemId)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.Stock, i => (i.Stock ?? 0) + line.Quantity));
+        }
+
+        if (transaction.Member != null)
+        {
+            var shuRateValue = await _context.Settings
+                .AsNoTracking()
+                .Where(s => s.Key == "shu_rate")
+                .Select(s => s.Value)
+                .FirstOrDefaultAsync();
+            var shuRate = decimal.TryParse(shuRateValue, out var parsed) ? parsed : 0.02m;
+            transaction.Member.ShuBalance = Math.Max(0, transaction.Member.ShuBalance - Math.Round((transaction.TotalAmount ?? 0) * shuRate, 2));
+        }
+
         transaction.PaymentStatus = "void";
         transaction.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        await dbTransaction.CommitAsync();
         return true;
     }
 
@@ -78,6 +117,8 @@ public class TransactionService : ITransactionService
             .AsSplitQuery()
             .Include(t => t.Member)
             .Include(t => t.User)
+            .Include(t => t.Discount)
+            .ThenInclude(d => d!.Category)
             .Include(t => t.Items)
             .ThenInclude(ti => ti.Item)
             .FirstOrDefaultAsync(t => t.Id == id);
@@ -99,6 +140,7 @@ public class TransactionService : ITransactionService
 
         existing.MemberId = transaction.MemberId;
         existing.UserId = transaction.UserId;
+        existing.DiscountId = transaction.DiscountId;
         existing.Type = transaction.Type;
         existing.TotalAmount = transaction.TotalAmount;
         existing.PaidAmount = transaction.PaidAmount;
@@ -235,7 +277,7 @@ public class TransactionService : ITransactionService
     }
 
     private static bool IsDuplicateKey(DbUpdateException ex)
-        => ex.InnerException is MySqlConnector.MySqlException { Number: 1062 };
+        => ex.InnerException is MySql.Data.MySqlClient.MySqlException { Number: 1062 };
 
     private async Task<bool> AcquireTrxNumberLockAsync()
     {

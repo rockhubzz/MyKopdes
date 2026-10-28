@@ -228,6 +228,7 @@ export interface Loan {
   outstanding_balance: string;
   accrued_interest: string;
   total_paid: string;
+  remaining_amount?: string;  // computed on the backend — what the member still owes
   status: LoanStatus;
   applied_at: string | null;
   approved_at: string | null;

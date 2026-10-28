@@ -69,7 +69,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Item>> Create()
     {
         var form = await Request.ReadFormAsync();
@@ -107,7 +107,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPost("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Item>> CreateOrUpdate(int id)
     {
         // Laravel-style _method spoofing: frontend sends POST with _method=PUT
@@ -121,7 +121,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Item>> Update(int id, IFormCollection form = null!)
     {
         try
@@ -187,7 +187,7 @@ public class ItemController : ControllerBase
     }
 
     [HttpPost("{id:int}/activate")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Item>> Activate(int id)
     {
         var item = await _itemService.ActivateAsync(id);
@@ -196,12 +196,19 @@ public class ItemController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<IActionResult> Delete(int id, [FromQuery(Name = "force")] int force = 0)
     {
-        var success = await _itemService.DeleteAsync(id, force != 0);
-        if (!success) return NotFound(new { message = "Item not found" });
-        return Ok(new { message = "Item deleted successfully" });
+        try
+        {
+            var success = await _itemService.DeleteAsync(id, force != 0);
+            if (!success) return NotFound(new { message = "Item not found" });
+            return Ok(new { message = "Item deleted successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
     }
 
     [HttpGet("search/{query}")]

@@ -4,8 +4,8 @@ namespace MyKopdes.Services;
 
 public interface IDiscountService
 {
-    Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = false);
-    Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = false);
+    Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = false, string? scope = null);
+    Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = false, string? scope = null);
     Task<Discount?> GetByIdAsync(int id);
     Task<Discount> CreateAsync(Discount discount);
     Task<Discount> UpdateAsync(int id, Discount discount);

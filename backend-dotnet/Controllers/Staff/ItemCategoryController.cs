@@ -51,7 +51,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<ItemCategory>> Create([FromBody] ItemCategory category)
     {
         var existing = await _context.ItemCategories.FirstOrDefaultAsync(c => c.Name == category.Name);
@@ -61,7 +61,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<ItemCategory>> Update(int id, [FromBody] ItemCategory category)
     {
         try
@@ -76,7 +76,7 @@ public class ItemCategoryController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner,manager,employee")]
+    [Authorize(Roles = "admin,shop_owner")]
     public async Task<IActionResult> Delete(int id)
     {
         try

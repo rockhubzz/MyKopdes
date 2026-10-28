@@ -18,26 +18,30 @@ public class AuditLogController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<PaginatedResponse<AuditLog>>> Get(
         [FromQuery] int page = 1,
-        [FromQuery(Name = "per_page")] int pageSize = 50)
+        [FromQuery(Name = "per_page")] int pageSize = 50,
+        [FromQuery] string? action = null,
+        [FromQuery(Name = "actor_id")] int? actorId = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null)
     {
-        var logs = await _auditLogService.GetAllAsync(page, pageSize);
-        var total = await _auditLogService.GetTotalCountAsync();
+        var logs = await _auditLogService.GetAllAsync(page, Math.Min(pageSize, 100), action, actorId, from, to);
+        var total = await _auditLogService.GetTotalCountAsync(action, actorId, from, to);
         var totalPages = (int)Math.Ceiling((double)total / pageSize);
         return Ok(new PaginatedResponse<AuditLog>
         {
             Data = logs,
             Page = page,
-            PageSize = pageSize,
+            PageSize = Math.Min(pageSize, 100),
             Total = total,
             TotalPages = totalPages
         });
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<AuditLog>> GetById(int id)
     {
         var log = await _auditLogService.GetByIdAsync(id);
@@ -46,7 +50,7 @@ public class AuditLogController : ControllerBase
     }
 
     [HttpGet("entity/{entityType}")]
-    [Authorize(Roles = "admin,shop_owner")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<IEnumerable<AuditLog>>> GetByEntity(string entityType, [FromQuery] int? entityId = null)
     {
         var logs = await _auditLogService.GetByEntityTypeAsync(entityType, entityId);

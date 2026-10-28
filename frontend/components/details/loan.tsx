@@ -78,6 +78,10 @@ export function LoanDetails({ id, endpointBase = '/loans', navigate }: { id: num
   const rateLabel = `${ratePct}%/${loan.interest_period === 'annual' ? 'yr' : 'mo'}`;
   const statusKey = `loans.${loan.status}` as const;
   const statusColor = STATUS_COLORS[loan.status] ?? '';
+  // What the member still owes: server-computed remaining, or outstanding − paid.
+  const remaining = loan.remaining_amount !== undefined && loan.remaining_amount !== null
+    ? Number(loan.remaining_amount)
+    : Number(loan.outstanding_balance) - Number(loan.total_paid ?? 0);
 
   return (
     <div>
@@ -100,7 +104,9 @@ export function LoanDetails({ id, endpointBase = '/loans', navigate }: { id: num
         <Field label={t('memberLoans.processingFeeLabel')}>{formatRp(loan.processing_fee)}</Field>
         <Field label={t('memberLoans.accruedInterest')}>{formatRp(loan.accrued_interest)}</Field>
         <Field label={t('loans.colBalance')}>
-          <span className="font-bold text-koperasi-800">{formatRp(loan.outstanding_balance)}</span>
+          <span className="font-bold text-koperasi-800">
+            {formatRp(remaining)}
+          </span>
         </Field>
         <Field label={t('memberLoans.totalPaid')}>{formatRp(loan.total_paid)}</Field>
       </Section>

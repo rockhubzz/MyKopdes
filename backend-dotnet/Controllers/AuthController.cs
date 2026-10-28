@@ -3,6 +3,8 @@ using MyKopdes.Models;
 using MyKopdes.Models.DTOs;
 using MyKopdes.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
+using MyKopdes.Data;
 
 namespace MyKopdes.Controllers;
 
@@ -12,11 +14,13 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IFileUploadService _fileUploads;
+    private readonly KoperasiDbContext _context;
 
-    public AuthController(IAuthService authService, IFileUploadService fileUploads)
+    public AuthController(IAuthService authService, IFileUploadService fileUploads, KoperasiDbContext context)
     {
         _authService = authService;
         _fileUploads = fileUploads;
+        _context = context;
     }
 
     // Staff login — matches frontend /api/auth/staff/login
@@ -66,9 +70,23 @@ public class AuthController : ControllerBase
         var user = await _authService.GetUserByIdAsync(userId.Value);
         if (user == null) return NotFound(new { message = "User not found" });
 
-        if (!string.IsNullOrEmpty(form["name"])) user.Name = form["name"];
-        if (!string.IsNullOrEmpty(form["phone"])) user.Phone = form["phone"];
-        if (!string.IsNullOrEmpty(form["shift_label"])) user.ShiftLabel = form["shift_label"];
+        if (form.ContainsKey("name")) user.Name = form["name"].ToString().Trim();
+        if (form.ContainsKey("email"))
+        {
+            var email = form["email"].ToString().Trim();
+            var duplicate = await _context.Users.AnyAsync(u => u.Id != user.Id && u.Email == email);
+            if (duplicate) return BadRequest(new { message = "Email already in use" });
+            user.Email = email;
+        }
+        if (form.ContainsKey("phone")) user.Phone = string.IsNullOrWhiteSpace(form["phone"].ToString()) ? null : form["phone"].ToString();
+        if (form.ContainsKey("shift_label")) user.ShiftLabel = string.IsNullOrWhiteSpace(form["shift_label"].ToString()) ? null : form["shift_label"].ToString();
+        if (form.ContainsKey("locale") && (form["locale"] == "en" || form["locale"] == "id")) user.Locale = form["locale"];
+        if (!string.IsNullOrEmpty(form["password"]))
+        {
+            if (form["password"].ToString().Length < 8)
+                return BadRequest(new { message = "Password must be at least 8 characters" });
+            user.Password = BCrypt.Net.BCrypt.HashPassword(form["password"]);
+        }
 
         // Avatar upload — stored as a storage-relative path so the frontend's
         // /storage/{avatar_path} URL resolves (static-files middleware).
@@ -80,6 +98,11 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Unsupported image type or file too large (jpg/png/webp/gif, max 10MB)" });
             if (!string.IsNullOrEmpty(user.Avatar)) _fileUploads.DeleteStoredImage(user.Avatar);
             user.Avatar = saved;
+        }
+        else if (form["remove_avatar"] == "1" || form["remove_avatar"] == "true")
+        {
+            _fileUploads.DeleteStoredImage(user.Avatar);
+            user.Avatar = null;
         }
 
         await _authService.UpdateUserAsync(user);
@@ -122,9 +145,11 @@ public class AuthController : ControllerBase
 
     // Staff logout
     [HttpPost("staff/logout")]
+    [Authorize(Roles = "admin,shop_owner,employee")]
     public IActionResult StaffLogout() => Ok(new { message = "Logged out" });
 
     // Member logout
     [HttpPost("member/logout")]
+    [Authorize(Roles = "member")]
     public IActionResult MemberLogout() => Ok(new { message = "Logged out" });
 }

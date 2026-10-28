@@ -5,7 +5,6 @@ public class Discount
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
-    [System.Text.Json.Serialization.JsonIgnore]
     public string? Description { get; set; }
     public int? ItemId { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]

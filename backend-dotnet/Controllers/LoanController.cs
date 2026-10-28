@@ -70,6 +70,25 @@ public class LoanController : ControllerBase
         }
     }
 
+    [HttpPost("{id:int}/activate")]
+    [Authorize(Roles = "admin,shop_owner")]
+    public async Task<ActionResult<Loan>> Activate(int id)
+    {
+        try
+        {
+            var loan = await _loanService.ActivateAsync(id);
+            return Ok(loan);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Loan not found" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{id:int}/write-off")]
     [Authorize(Roles = "admin,shop_owner")]
     public async Task<ActionResult<Loan>> WriteOff(int id, [FromBody] LoanActionRequest? request = null)
@@ -98,6 +117,14 @@ public class LoanController : ControllerBase
         catch (KeyNotFoundException)
         {
             return NotFound(new { message = "Loan not found" });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 }

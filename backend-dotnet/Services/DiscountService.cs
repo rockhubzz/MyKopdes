@@ -13,7 +13,7 @@ public class DiscountService : IDiscountService
         _context = context;
     }
 
-    public async Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = false)
+    public async Task<List<Discount>> GetAllAsync(int page = 1, int pageSize = 15, string? search = null, bool activeOnly = false, string? scope = null)
     {
         var query = _context.Discounts.AsQueryable();
         if (!string.IsNullOrEmpty(search))
@@ -24,6 +24,7 @@ public class DiscountService : IDiscountService
         {
             query = query.Where(d => d.IsActive);
         }
+        if (!string.IsNullOrWhiteSpace(scope)) query = query.Where(d => d.Scope == scope);
         return await query
             .Include(d => d.Category)
             .OrderByDescending(d => d.CreatedAt)
@@ -32,7 +33,7 @@ public class DiscountService : IDiscountService
             .ToListAsync();
     }
 
-    public async Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = false)
+    public async Task<int> GetTotalCountAsync(string? search = null, bool activeOnly = false, string? scope = null)
     {
         var query = _context.Discounts.AsQueryable();
         if (!string.IsNullOrEmpty(search))
@@ -43,6 +44,7 @@ public class DiscountService : IDiscountService
         {
             query = query.Where(d => d.IsActive);
         }
+        if (!string.IsNullOrWhiteSpace(scope)) query = query.Where(d => d.Scope == scope);
         return await query.CountAsync();
     }
 
@@ -95,8 +97,8 @@ public class DiscountService : IDiscountService
 
         if (force)
         {
-            // Hard delete — permanent removal (used by the Delete button,
-            // and by Reactivate flows the same way items work).
+            if (await _context.Transactions.AnyAsync(t => t.DiscountId == id))
+                throw new InvalidOperationException("Cannot permanently delete a discount used in past transactions. Deactivate it instead.");
             _context.Discounts.Remove(discount);
         }
         else
@@ -131,10 +133,9 @@ public class DiscountService : IDiscountService
                 (d.StartDate == null || d.StartDate <= now) &&
                 (d.EndDate == null || d.EndDate >= now));
 
-        if (has_member)
-            query = query.Where(d => d.Scope == "member");
-        else
-            query = query.Where(d => d.Scope != "member");
+        query = has_member
+            ? query.Where(d => d.Scope == "member" || d.Scope == "general")
+            : query.Where(d => d.Scope != "member");
 
         return await query.ToListAsync();
     }

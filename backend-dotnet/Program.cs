@@ -10,7 +10,6 @@ using MyKopdes.Middleware;
 using System.IO.Compression;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.HttpOverrides;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,7 +28,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
     {
         Title = "MyKopdes API",
         Version = "v1",
@@ -43,28 +42,19 @@ builder.Services.AddSwaggerGen(options =>
 
     // JWT bearer: adds the Authorize button on locked endpoints so they can
     // be tried straight from Swagger UI.
-    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Type = Microsoft.OpenApi.SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        In = Microsoft.OpenApi.ParameterLocation.Header,
         Description = "Paste the token from /api/auth/staff/login or /api/auth/member/login (no 'Bearer ' prefix needed)."
     });
-    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    options.AddSecurityRequirement(document => new Microsoft.OpenApi.OpenApiSecurityRequirement
     {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+        [new Microsoft.OpenApi.OpenApiSecuritySchemeReference("Bearer", hostDocument: document)] =
+            new List<string>()
     });
 
     // Pick up /// comments from controllers/models into the UI.
@@ -88,26 +78,35 @@ builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = Compre
 builder.Services.AddMemoryCache();
 
 // Database - MySQL with existing schema (no migrations, no schema changes).
-// Pooled contexts are cheaper per request than a fresh DbContext, and a fixed
-// server version avoids a live DB round trip just to detect the version at
-// startup (which also made bootup depend on MySQL being reachable first).
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
-    ?? "server=mysql;port=3306;database=koperasi;user=koperasi;password=koperasi_secret;SslMode=none;AllowPublicKeyRetrieval=true";
+// Pooled contexts are cheaper per request than a fresh DbContext.
+// Treats both null and empty string as "not configured" — appsettings.json
+// ships empty values so the env var must be the source of truth.
+var connectionString = FirstNonEmpty(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        Environment.GetEnvironmentVariable("DB_CONNECTION_STRING"))
+    ?? throw new InvalidOperationException(
+        "FATAL: No database connection string configured. " +
+        "Set ConnectionStrings:DefaultConnection in appsettings.json or the DB_CONNECTION_STRING environment variable.");
 
 builder.Services.AddDbContextPool<KoperasiDbContext>(options =>
-    options.UseMySql(connectionString, KoperasiDbContext.FixedServerVersion));
+    options.UseMySQL(connectionString));
 
-// JWT Authentication — fallback to environment variables for Docker
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? Environment.GetEnvironmentVariable("JWT_KEY")
-    ?? "KoperasiSuperSecretKeyForJwtTokens2024!";
-var jwtIssuer = builder.Configuration["Jwt:Issuer"]
-    ?? Environment.GetEnvironmentVariable("JWT_ISSUER")
-    ?? "http://localhost";
-var jwtAudience = builder.Configuration["Jwt:Audience"]
-    ?? Environment.GetEnvironmentVariable("JWT_AUDIENCE")
-    ?? "http://localhost";
+// JWT Authentication — fail fast if no key is configured (no hardcoded fallback).
+var jwtKey = FirstNonEmpty(
+        builder.Configuration["Jwt:Key"],
+        Environment.GetEnvironmentVariable("JWT_KEY"))
+    ?? throw new InvalidOperationException(
+        "FATAL: No JWT signing key configured. " +
+        "Set Jwt:Key in appsettings.json or the JWT_KEY environment variable. " +
+        "Generate one with: openssl rand -hex 32");
+var jwtIssuer = FirstNonEmpty(
+        builder.Configuration["Jwt:Issuer"],
+        Environment.GetEnvironmentVariable("JWT_ISSUER"),
+        "http://localhost");
+var jwtAudience = FirstNonEmpty(
+        builder.Configuration["Jwt:Audience"],
+        Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
+        "http://localhost");
 var jwtExpiry = builder.Configuration.GetValue<int>("Jwt:ExpiryMinutes", 1440);
 
 var jwtSettings = new JwtSettings
@@ -169,15 +168,16 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 // The TLS termination happens at the nginx container, so no HTTPS redirect
 // here (UseHttpsRedirection is a no-op behind the proxy anyway).
-// Swagger UI is served in Production as well (the deployment is an internal
-// docker network) so the API can be explored/tested live; to restrict it,
-// gate these two lines on app.Environment.IsDevelopment().
-app.UseSwagger();
-app.UseSwaggerUI(options =>
+// Swagger is development-only in production to prevent API surface enumeration.
+if (app.Environment.IsDevelopment())
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "MyKopdes API v1");
-    options.DocumentTitle = "MyKopdes API Docs";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "MyKopdes API v1");
+        options.DocumentTitle = "MyKopdes API Docs";
+    });
+}
 
 // Behind nginx: trust X-Forwarded-For/Proto so logs and audit entries carry
 // the real client IP instead of nginx's container IP.
@@ -210,6 +210,7 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
+app.UseMiddleware<MyKopdes.Middleware.RateLimitMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<RequestLoggingMiddleware>();
@@ -220,4 +221,19 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 
 app.Run();
 
-public partial class Program { }
+public partial class Program
+{
+    /// <summary>
+    /// Returns the first non-null, non-empty string from <c>candidates</c>,
+    /// or null if all are null/empty. Required because <c>??</c> alone only
+    /// checks for null — an empty string in appsettings.json would otherwise
+    /// short-circuit the environment-variable fallback.
+    /// </summary>
+    private static string? FirstNonEmpty(params string?[] candidates)
+    {
+        foreach (var s in candidates)
+            if (!string.IsNullOrEmpty(s))
+                return s;
+        return null;
+    }
+}

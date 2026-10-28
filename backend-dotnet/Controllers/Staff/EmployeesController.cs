@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MyKopdes.Data;
 using MyKopdes.Models;
 using MyKopdes.Models.DTOs;
+using MyKopdes.Middleware;
 
 namespace MyKopdes.Controllers.Staff;
 
@@ -39,7 +40,7 @@ public class EmployeesController : ControllerBase
 
         var total = await query.CountAsync();
         var users = await query
-            .OrderByDescending(u => u.CreatedAt)
+            .OrderBy(u => u.Name)
             .Select(u => new
             {
                 u.Id,
@@ -148,9 +149,14 @@ public class EmployeesController : ControllerBase
     {
         var u = await _context.Users.FindAsync(id);
         if (u == null || u.Role != "employee") return NotFound(new { message = "Employee not found" });
+        if (User.GetUserId() == id)
+            return UnprocessableEntity(new { message = "You cannot deactivate your own account" });
 
         if (force != 0)
         {
+            if (await _context.Transactions.AnyAsync(t => t.UserId == id) ||
+                await _context.RestockingRecords.AnyAsync(r => r.UserId == id))
+                return UnprocessableEntity(new { message = "Cannot permanently delete an employee with transaction or restock history" });
             _context.Users.Remove(u);
         }
         else

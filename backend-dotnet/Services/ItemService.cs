@@ -31,7 +31,9 @@ public class ItemService : IItemService
         }
         if (lowStock)
         {
-            query = query.Where(i => (i.Stock ?? 0) <= (i.MinStock ?? 0));
+            query = query.Where(i =>
+                (i.MinStock.HasValue && (i.Stock ?? 0) <= i.MinStock.Value) ||
+                (!i.MinStock.HasValue && (i.Stock ?? 0) <= 10));
         }
         if (activeOnly)
         {
@@ -39,7 +41,7 @@ public class ItemService : IItemService
         }
 
         return await query
-            .OrderByDescending(i => i.CreatedAt)
+            .OrderBy(i => i.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -110,6 +112,9 @@ public class ItemService : IItemService
         if (item == null) return false;
         if (force)
         {
+            if (await _context.TransactionItems.AnyAsync(ti => ti.ItemId == id) ||
+                await _context.RestockingRecords.AnyAsync(r => r.ItemId == id))
+                throw new InvalidOperationException("Cannot permanently delete an item with sales or restock history. Deactivate it instead.");
             _context.Items.Remove(item);
         }
         else
@@ -150,7 +155,9 @@ public class ItemService : IItemService
         }
         if (lowStock)
         {
-            query = query.Where(i => (i.Stock ?? 0) <= (i.MinStock ?? 0));
+            query = query.Where(i =>
+                (i.MinStock.HasValue && (i.Stock ?? 0) <= i.MinStock.Value) ||
+                (!i.MinStock.HasValue && (i.Stock ?? 0) <= 10));
         }
         if (activeOnly)
         {

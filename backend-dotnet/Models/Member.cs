@@ -1,3 +1,5 @@
+using MyKopdes.Models.DTOs;
+
 namespace MyKopdes.Models;
 
 // Member: cooperative members (from Laravel App\Models\Member)
@@ -9,6 +11,7 @@ public class Member
     public string? Identifier { get; set; }  // membership_id, e.g. KOP-26-IASQV
     public string Name { get; set; } = null!;
     public string? Email { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
     public string Password { get; set; } = null!;
     public string? Phone { get; set; }
     public string? Address { get; set; }
@@ -36,6 +39,11 @@ public class Member
     // Navigation properties
     [System.Text.Json.Serialization.JsonIgnore]
     public ICollection<Transaction>? Transactions { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("transactions")]
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public IEnumerable<MemberTransactionSummary>? TransactionsForApi =>
+        Transactions?.Select(MemberTransactionSummary.From);
     [System.Text.Json.Serialization.JsonIgnore]
     public ICollection<Loan>? Loans { get; set; }
 }

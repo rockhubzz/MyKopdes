@@ -26,14 +26,14 @@ public class DashboardController : ControllerBase
     {
         var today = DateTime.UtcNow.Date;
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-        var endOfMonth = monthStart.AddMonths(1).AddDays(-1);
+        var endOfMonth = DateTime.UtcNow;
 
         // Aggregate in SQL: previously a full month of transactions *plus all
         // of their line items* was materialized and summed in C#. Here the DB
         // computes each transaction's item total and only two decimal columns
         // cross the wire — one row per transaction, not per line item.
         var todayStats = await _context.Transactions
-            .Where(t => t.CreatedAt >= today && t.CreatedAt < today.AddDays(1))
+            .Where(t => t.CreatedAt >= today && t.CreatedAt < today.AddDays(1) && t.PaymentStatus == "paid")
             .Select(t => new
             {
                 Total = t.TotalAmount,
@@ -42,7 +42,7 @@ public class DashboardController : ControllerBase
             .ToListAsync();
 
         var monthStats = await _context.Transactions
-            .Where(t => t.CreatedAt >= monthStart && t.CreatedAt <= endOfMonth)
+            .Where(t => t.CreatedAt >= monthStart && t.CreatedAt <= endOfMonth && t.PaymentStatus == "paid")
             .Select(t => new
             {
                 Total = t.TotalAmount,
@@ -61,7 +61,8 @@ public class DashboardController : ControllerBase
 
         var bestSellers = await _context.TransactionItems
             .AsNoTracking()
-            .Where(ti => ti.CreatedAt >= monthStart && ti.CreatedAt <= endOfMonth)
+            .Where(ti => ti.Transaction.CreatedAt >= monthStart && ti.Transaction.CreatedAt <= endOfMonth &&
+                ti.Transaction.PaymentStatus == "paid")
             .GroupBy(ti => ti.Item != null ? ti.Item.Name : "Unknown")
             .Select(g => new
             {
@@ -76,8 +77,9 @@ public class DashboardController : ControllerBase
         var totalStockValueCost = await _context.Items.SumAsync(i => (i.Stock ?? 0) * (i.Cost ?? 0));
         var totalStockValueRetail = await _context.Items.SumAsync(i => (i.Stock ?? 0) * (i.Price ?? 0));
         var lowStockCount = await _context.Items
-            .Where(i => (i.MinStock.HasValue && (i.Stock ?? 0) <= i.MinStock.Value) ||
+            .Where(i => i.IsActive && ((i.MinStock.HasValue && (i.Stock ?? 0) <= i.MinStock.Value) ||
                 (!i.MinStock.HasValue && (i.Stock ?? 0) <= 10))
+            )
             .CountAsync();
 
         return Ok(new
@@ -150,8 +152,9 @@ public class DashboardController : ControllerBase
     public async Task<ActionResult<object>> GetAlerts()
     {
         var lowStock = await _context.Items
-            .Where(i => (i.MinStock.HasValue && (i.Stock ?? 0) <= i.MinStock.Value) ||
+            .Where(i => i.IsActive && ((i.MinStock.HasValue && (i.Stock ?? 0) <= i.MinStock.Value) ||
                 (!i.MinStock.HasValue && (i.Stock ?? 0) <= 10))
+            )
             .Select(i => new
             {
                 id = i.Id,
@@ -162,7 +165,7 @@ public class DashboardController : ControllerBase
             .ToListAsync();
 
         var expiringSoon = await _context.Items
-            .Where(i => i.ExpiryDate.HasValue && i.ExpiryDate <= DateTime.UtcNow.AddDays(7) && i.ExpiryDate > DateTime.UtcNow)
+            .Where(i => i.IsActive && i.ExpiryDate.HasValue && i.ExpiryDate <= DateTime.UtcNow.AddDays(7) && i.ExpiryDate > DateTime.UtcNow)
             .Select(i => new
             {
                 id = i.Id,
@@ -187,11 +190,11 @@ public class DashboardController : ControllerBase
         var staffId = int.TryParse(userId, out var sid) ? sid : (int?)null;
 
         var transactionsToday = await _context.Transactions
-            .Where(t => t.CreatedAt >= today && t.CreatedAt < today.AddDays(1))
+            .Where(t => t.UserId == staffId && t.CreatedAt >= today && t.CreatedAt < today.AddDays(1) && t.PaymentStatus == "paid")
             .CountAsync();
 
         var revenueToday = await _context.Transactions
-            .Where(t => t.CreatedAt >= today && t.CreatedAt < today.AddDays(1))
+            .Where(t => t.UserId == staffId && t.CreatedAt >= today && t.CreatedAt < today.AddDays(1) && t.PaymentStatus == "paid")
             .SumAsync(t => (decimal)(t.TotalAmount ?? 0));
 
         var restocksToday = staffId.HasValue

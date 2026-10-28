@@ -27,12 +27,28 @@ export default function OwnerLoansPage() {
   const [paySuccess, setPaySuccess] = useState<string | null>(null);
   const { t, tx } = useLanguage();
 
-  async function handleAction(action: 'approve' | 'reject' | 'write-off', loan: Loan) {
-    const label = action === 'approve' ? t('loans.approve') : action === 'reject' ? t('loans.reject') : t('loans.writeOff');
+  // What the member actually still owes — the server sends the computed
+  // remaining; fall back to outstanding − paid for older payloads.
+  function remainingOf(l: Loan): number {
+    if (l.remaining_amount !== undefined && l.remaining_amount !== null)
+      return Number(l.remaining_amount);
+    return Number(l.outstanding_balance) - Number(l.total_paid ?? 0);
+  }
+
+  async function handleAction(action: 'approve' | 'reject' | 'write-off' | 'activate', loan: Loan) {
+    const label = action === 'approve'
+      ? t('loans.approve')
+      : action === 'reject'
+      ? t('loans.reject')
+      : action === 'activate'
+      ? t('loans.activate')
+      : t('loans.writeOff');
     const confirmMsg = action === 'approve'
       ? t('loans.approveConfirm', { code: loan.loan_code })
       : action === 'reject'
       ? t('loans.rejectConfirm', { code: loan.loan_code })
+      : action === 'activate'
+      ? t('loans.activateConfirm', { code: loan.loan_code })
       : `${t('loans.writeOff')} ${loan.loan_code}?`;
 
     if (!confirm(confirmMsg)) return;
@@ -48,7 +64,13 @@ export default function OwnerLoansPage() {
       }
       setReloadKey((k) => k + 1);
     } catch (err) {
-      const failKey = action === 'approve' ? 'loans.approveFailed' : action === 'reject' ? 'loans.rejectFailed' : 'loans.writeOffFailed';
+      const failKey = action === 'approve'
+        ? 'loans.approveFailed'
+        : action === 'reject'
+        ? 'loans.rejectFailed'
+        : action === 'activate'
+        ? 'loans.activateFailed'
+        : 'loans.writeOffFailed';
       alert(err instanceof ApiError ? err.message : t(failKey));
     }
   }
@@ -59,12 +81,11 @@ export default function OwnerLoansPage() {
     setPayError(null);
     setPaySuccess(null);
     try {
-      await apiFetch(`/loans/${payLoan.id}/pay`, {
+      const updated = await apiFetch<Loan>(`/loans/${payLoan.id}/pay`, {
         method: 'POST',
         body: { amount: payAmount, payment_method: payMethod },
       });
-      const remaining = (Number(payLoan.outstanding_balance) - Number(payAmount)).toLocaleString('id-ID');
-      setPaySuccess(t('loans.repaySuccess', { balance: remaining }));
+      setPaySuccess(t('loans.repaySuccess', { balance: remainingOf(updated).toLocaleString('id-ID') }));
       setPayLoan(null);
       setPayAmount('');
       setReloadKey((k) => k + 1);
@@ -78,7 +99,7 @@ export default function OwnerLoansPage() {
     { header: t('loans.colMember'), render: (l) => l.member?.name ?? `—` },
     { header: t('loans.colProduct'), render: (l) => l.product?.name ?? `—` },
     { header: t('loans.colPrincipal'), render: (l) => `Rp ${Number(l.principal).toLocaleString('id-ID')}` },
-    { header: t('loans.colBalance'), render: (l) => `Rp ${Number(l.outstanding_balance).toLocaleString('id-ID')}` },
+    { header: t('loans.colBalance'), render: (l) => `Rp ${remainingOf(l).toLocaleString('id-ID')}` },
     {
       header: t('loans.colStatus'),
       render: (l) => (
@@ -109,6 +130,9 @@ export default function OwnerLoansPage() {
             btns.push(<button key="approve" className="btn-action-edit" onClick={() => handleAction('approve', l)}>{t('loans.approve')}</button>);
             btns.push(<button key="reject" className="btn-action-danger" onClick={() => handleAction('reject', l)}>{t('loans.reject')}</button>);
           }
+          if (is === 'approved') {
+            btns.push(<button key="activate" className="btn-action-edit" onClick={() => handleAction('activate', l)}>{t('loans.activate')}</button>);
+          }
           if (is === 'active' || is === 'approved') {
             btns.push(<button key="write-off" className="btn-action-danger" onClick={() => handleAction('write-off', l)}>{t('loans.writeOff')}</button>);
           }
@@ -127,7 +151,7 @@ export default function OwnerLoansPage() {
           <div className="card w-full max-w-md">
             <h2 className="font-semibold text-lg mb-4">{t('loans.repayTitle', { code: payLoan.loan_code })}</h2>
             <div className="text-sm text-koperasi-500 mb-3">
-              {t('loans.minInstallment', { amount: Number(payLoan.minimum_installment ?? 0).toLocaleString('id-ID') })}
+              {t('loans.repayRemaining', { balance: remainingOf(payLoan).toLocaleString('id-ID') })}
             </div>
             <form onSubmit={handlePay} className="space-y-3">
               <div>
@@ -137,7 +161,7 @@ export default function OwnerLoansPage() {
                   type="number"
                   step="1000"
                   min="0"
-                  max={Number(payLoan.outstanding_balance).toFixed(2)}
+                  max={remainingOf(payLoan).toFixed(2)}
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                   required

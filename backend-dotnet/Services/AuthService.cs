@@ -64,7 +64,7 @@ public class AuthService : IAuthService
     public async Task<MemberLoginResponse?> MemberLoginAsync(string identifier, string password)
     {
         var member = await _context.Members
-            .FirstOrDefaultAsync(m => (m.Identifier == identifier || m.Phone == identifier) && m.IsActive);
+            .FirstOrDefaultAsync(m => (m.Identifier == identifier || m.Phone == identifier || m.Email == identifier) && m.IsActive);
 
         if (member == null) return null;
 

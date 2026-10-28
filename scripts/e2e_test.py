@@ -204,6 +204,9 @@ def suite_infra(base):
     check("/member/me shape has membership_id", (d or {}).get("membership_id") is not None,
           f"keys={list((d or {}).keys())}")
 
+    s, d, _ = req("GET", "/api/settings/public", base=base)
+    check("public settings endpoint is unauthenticated", s == 200 and isinstance(d, dict), f"got {s} {d}")
+
 
 def suite_auth(base):
     global STAFF_TOKEN, MEMBER_TOKEN
@@ -362,6 +365,31 @@ def suite_members(base):
     check("old password rejected after admin reset", s in (400, 401), f"got {s}")
     s, d, _ = req("POST", "/api/auth/member/login", {"identifier": phone, "password": "newpass456"}, base=base)
     check("new password works after admin reset", s == 200, f"got {s}")
+
+    # --- public self-signup round trip -------------------------------------
+    signup_phone = f"081{uuid.uuid4().hex[:9]}"
+    signup_email = f"{MARKER.lower()}-signup@e2e.test"
+    signup_body = {
+        "name": f"{MARKER} Self Signup",
+        "phone": signup_phone,
+        "email": signup_email,
+        "address": "E2E signup address",
+        "password": "secret123",
+    }
+    s, d, _ = req("POST", "/api/auth/member/register", signup_body, base=base)
+    signup_id = (d or {}).get("member", {}).get("id") if isinstance(d, dict) else None
+    check("member self-signup returns token and generated membership ID",
+          s == 200 and bool((d or {}).get("token")) and
+          bool(re.match(r"^KOP-\d{4}-\d{4}$", (d or {}).get("member", {}).get("membership_id", ""))),
+          f"got {s} {d}")
+    if signup_id:
+        CREATED["members"].append(signup_id)
+        signup_token = d["token"]
+        s, profile, _ = req("GET", "/api/member/profile", token=signup_token, base=base)
+        check("self-signup token opens member profile", s == 200 and profile.get("phone") == signup_phone,
+              f"got {s} {profile}")
+        s, _, _ = req("POST", "/api/auth/member/register", signup_body, base=base)
+        check("self-signup rejects duplicate phone/email", s == 409, f"got {s}")
 
     s, d, _ = req("DELETE", f"/api/members/{member_id}", token=STAFF_TOKEN, base=base)
     check("member delete 200", s == 200, f"got {s}")
@@ -579,9 +607,9 @@ def suite_checkout(base):
     # Preview with member discount (seeded "Diskon Anggota 5%" member scope)
     body_m = dict(body, member_identifier=first_member_id())
     s, d, _ = req("POST", "/api/transactions/preview", body_m, token=STAFF_TOKEN, base=base)
-    check("member discount preview applies 5%", (d or {}).get("discount_amount") == 1000,
+    check("best eligible discount preview applies 7%", (d or {}).get("discount_amount") == 1400,
           f"discount_amount={d.get('discount_amount')} discount={d.get('discount')}")
-    check("member discount preview total 19000", (d or {}).get("total") == 19000, f"total={d.get('total')}")
+    check("best eligible discount preview total 18600", (d or {}).get("total") == 18600, f"total={d.get('total')}")
 
     # Commit (no discount)
     s, d, _ = req("POST", "/api/transactions/checkout", body, token=STAFF_TOKEN, base=base)
@@ -591,7 +619,7 @@ def suite_checkout(base):
     check("transaction_code pattern TRX-YYYYMMDD-NNNN",
           bool(re.match(r"^TRX-\d{8}-\d{4,}$", txn.get("transaction_code", ""))),
           f"code={txn.get('transaction_code')}")
-    check("checkout total = 20000", txn.get("total") == 20000, f"total={txn.get('total')}")
+    check("checkout total includes best eligible discount", txn.get("total") == 18600, f"total={txn.get('total')}")
     check("receipt has line items with name/quantity/subtotal",
           bool(txn.get("items")) and txn["items"][0].get("item", {}).get("name") == f"{MARKER} CashItem"
           and txn["items"][0].get("quantity") == 2 and txn["items"][0].get("subtotal") == 20000,
@@ -604,7 +632,11 @@ def suite_checkout(base):
     # Detail endpoint consistency
     s, d, _ = req("GET", f"/api/transactions/{txn.get('id')}", token=STAFF_TOKEN, base=base)
     check("GET transaction returns same totals + items",
-          (d or {}).get("total") == 20000 and bool((d or {}).get("items")), f"got {s}")
+          (d or {}).get("total") == 18600 and bool((d or {}).get("items")), f"got {s}")
+    s, d, _ = req("GET", f"/api/transactions/{txn.get('id')}/receipt", token=STAFF_TOKEN, base=base)
+    check("receipt endpoint returns transaction and store", s == 200 and
+          isinstance(d, dict) and isinstance(d.get("transaction"), dict) and isinstance(d.get("store"), dict),
+          f"got {s} {d}")
 
     # Void + audit log
     s, d, _ = req("POST", f"/api/transactions/{txn.get('id')}/void", token=STAFF_TOKEN, base=base)
@@ -845,6 +877,10 @@ def suite_reports(base):
     check("stock-valuation total equals DB sum", api_val is not None and
           abs(float(api_val) - float(db_val)) < 0.01, f"api={api_val} db={db_val}")
 
+    s, d, _ = req("GET", "/api/reports/daily-series", token=STAFF_TOKEN, base=base)
+    check("daily report series 200 with date/revenue/count rows", s == 200 and isinstance(d, list) and
+          all({"date", "revenue", "transactions"} <= set(row) for row in d), f"got {s} {d}")
+
     # Reports must be readable by BOTH admin and the actual owner role
     # (shop_owner) and forbidden for plain employees.
     s, d, _ = req("POST", "/api/auth/staff/login",
@@ -897,10 +933,10 @@ def suite_reports(base):
     # the items' cost-based sum (the old formula summed the SALE price).
     s, d, _ = req("GET", "/api/reports/summary", token=STAFF_TOKEN, base=base)
     db_revenue = sql("SELECT ROUND(SUM(COALESCE(total,0)),2) FROM transactions "
-                     "WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY AND created_at <= UTC_TIMESTAMP()")
+                     "WHERE payment_status='paid' AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY AND created_at <= UTC_TIMESTAMP()")
     db_cogs = sql("SELECT ROUND(SUM(COALESCE(i.cost_price,0)*ti.quantity),2) FROM transaction_items ti "
                   "JOIN transactions t ON t.id = ti.transaction_id JOIN items i ON i.id = ti.item_id "
-                  "WHERE ti.created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY AND ti.created_at <= UTC_TIMESTAMP()")
+                     "WHERE t.payment_status='paid' AND ti.created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY AND ti.created_at <= UTC_TIMESTAMP()")
     api_rev = (d or {}).get("revenue")
     api_cogs = (d or {}).get("cost_of_goods_sold")
     check("reports summary revenue matches SQL", api_rev is not None and
@@ -909,11 +945,11 @@ def suite_reports(base):
           abs(float(api_cogs) - float(db_cogs)) < 1.00, f"api={api_cogs} db={db_cogs}")
     check("reports summary count matches SQL",
           str((d or {}).get("transaction_count")) == sql(
-              "SELECT COUNT(*) FROM transactions WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY "
-              "AND created_at <= UTC_TIMESTAMP()"), f"api={d.get('transaction_count')}")
+               "SELECT COUNT(*) FROM transactions WHERE payment_status='paid' AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY "
+               "AND created_at <= UTC_TIMESTAMP()"), f"api={d.get('transaction_count')}")
 
     s, d, _ = req("GET", "/api/dashboard/alerts", token=STAFF_TOKEN, base=base)
-    db_low = sql("SELECT COUNT(*) FROM items WHERE (min_stock_threshold IS NOT NULL AND COALESCE(current_stock,0) <= min_stock_threshold) OR (min_stock_threshold IS NULL AND COALESCE(current_stock,0) <= 10)")
+    db_low = sql("SELECT COUNT(*) FROM items WHERE is_active=1 AND ((min_stock_threshold IS NOT NULL AND COALESCE(current_stock,0) <= min_stock_threshold) OR (min_stock_threshold IS NULL AND COALESCE(current_stock,0) <= 10))")
     check("alerts low_stock count matches DB", str(len((d or {}).get("low_stock", []))) == db_low,
           f"api={len((d or {}).get('low_stock', []))} db={db_low}")
 

@@ -25,7 +25,7 @@ public class MemberService : IMemberService
             query = query.Where(m => m.IsActive);
         }
         return await query
-            .OrderByDescending(m => m.CreatedAt)
+            .OrderBy(m => m.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -33,12 +33,19 @@ public class MemberService : IMemberService
 
     public async Task<Member?> GetByIdAsync(int id)
     {
-        return await _context.Members.FindAsync(id);
+        return await _context.Members
+            .Include(m => m.Transactions!.OrderByDescending(t => t.CreatedAt).Take(10))
+            .FirstOrDefaultAsync(m => m.Id == id);
     }
 
     public async Task<Member?> GetByIdentifierAsync(string identifier)
     {
         return await _context.Members.FirstOrDefaultAsync(m => m.Identifier == identifier || m.Phone == identifier);
+    }
+
+    public async Task<Member?> GetByEmailAsync(string email)
+    {
+        return await _context.Members.FirstOrDefaultAsync(m => m.Email == email);
     }
 
     public async Task<Member> CreateAsync(Member member)
@@ -95,7 +102,7 @@ public class MemberService : IMemberService
     }
 
     private static bool IsDuplicateKey(DbUpdateException ex)
-        => ex.InnerException is MySqlConnector.MySqlException { Number: 1062 };
+        => ex.InnerException is MySql.Data.MySqlClient.MySqlException { Number: 1062 };
 
     public async Task<Member> UpdateAsync(int id, Member member)
     {
@@ -132,6 +139,8 @@ public class MemberService : IMemberService
 
         if (force)
         {
+            if (await _context.Transactions.AnyAsync(t => t.MemberId == id))
+                throw new InvalidOperationException("Cannot permanently delete a member with purchase history. Deactivate it instead.");
             _context.Members.Remove(member);
         }
         else
@@ -148,6 +157,26 @@ public class MemberService : IMemberService
     {
         return await _context.Members
             .Where(m => m.Name.Contains(query) || m.Identifier.Contains(query) || (m.Phone != null && m.Phone.Contains(query)))
+            .ToListAsync();
+    }
+
+    public async Task<List<Member>> LookupAsync(string query)
+    {
+        query = query.Trim();
+        return await _context.Members
+            .AsNoTracking()
+            .Where(m => m.IsActive &&
+                (m.Identifier == query || m.Phone == query || m.Email == query || m.Name.Contains(query)))
+            .OrderBy(m => m.Name)
+            .Select(m => new Member
+            {
+                Id = m.Id,
+                Identifier = m.Identifier,
+                Name = m.Name,
+                Phone = m.Phone,
+                IsActive = m.IsActive
+            })
+            .Take(8)
             .ToListAsync();
     }
 

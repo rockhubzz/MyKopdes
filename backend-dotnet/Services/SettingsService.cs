@@ -25,6 +25,14 @@ public class SettingsService : ISettingsService
         return settings;
     }
 
+    public async Task<Dictionary<string, string>> GetPublicAsync()
+    {
+        return await _context.Settings
+            .AsNoTracking()
+            .Where(s => s.IsPublic)
+            .ToDictionaryAsync(s => s.Key, s => s.Value ?? "");
+    }
+
     public async Task<Setting?> GetByKeyAsync(string key)
     {
         return await _context.Settings.FirstOrDefaultAsync(s => s.Key == key);

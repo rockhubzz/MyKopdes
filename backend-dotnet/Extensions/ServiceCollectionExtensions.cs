@@ -40,9 +40,14 @@ public static class ServiceCollectionExtensions
 
     public static IApplicationBuilder UseCorsPolicy(this IApplicationBuilder app)
     {
+        // Restrict CORS to the configured app URL (same-origin deployment via
+        // nginx means the browser never needs cross-origin access). Wildcard
+        // + AllowCredentials previously allowed any site to make credentialed
+        // requests on behalf of a logged-in user.
+        var allowedOrigin = Environment.GetEnvironmentVariable("APP_URL") ?? "http://localhost";
         app.UseCors(policy =>
         {
-            policy.SetIsOriginAllowed(_ => true)
+            policy.WithOrigins(allowedOrigin)
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials();

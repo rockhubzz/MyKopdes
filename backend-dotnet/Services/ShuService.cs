@@ -60,7 +60,7 @@ public class ShuService : IShuService
             if (year.HasValue) query = query.Where(s => s.Year == year.Value);
             return await query.SumAsync(s => (decimal)(s.Amount ?? 0));
         }
-        catch (MySqlConnector.MySqlException ex) when (ex.Number == 1146)
+        catch (MySql.Data.MySqlClient.MySqlException ex) when (ex.Number == 1146)
         {
             // The shu records table doesn't exist in this deployment — the
             // member's stored SHU balance is the authoritative source.
