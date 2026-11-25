@@ -89,7 +89,7 @@ export default function LoginPage() {
           <div className="mb-2 flex justify-center text-harvest-400" aria-hidden="true">
             <Wheat size={40} />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Koperasi Store</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Koperasi Desa</h1>
           <p className="text-koperasi-100/90 text-sm mt-1">{t('login.tagline')}</p>
         </div>
 
